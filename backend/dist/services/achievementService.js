@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.invalidateUserAchievementCache = invalidateUserAchievementCache;
 exports.analyzeAchievementProgress = analyzeAchievementProgress;
+const crypto_1 = require("crypto");
 const achievements_1 = require("../config/achievements");
 const cache_1 = require("../lib/cache");
 const errors_1 = require("../lib/errors");
@@ -10,14 +11,25 @@ const tierUtils_1 = require("../utils/tierUtils");
 const PUBLIC_CACHE_TTL_SECONDS = Number(process.env.PUBLIC_CACHE_TTL_SECONDS ?? 120);
 const AUTH_CACHE_TTL_SECONDS = Number(process.env.AUTH_CACHE_TTL_SECONDS ?? 90);
 const AUTO_SYNC_INTERVAL_SECONDS = Number(process.env.AUTO_SYNC_INTERVAL_SECONDS ?? 120);
+const MAX_OWNED_REPO_PAGES = 20;
 const MAX_QUICKDRAW_EVENT_PAGES = 3;
-const MAX_PAIR_YOLO_INSPECTION = 30;
+const PUBLIC_PAIR_YOLO_INSPECTION_LIMIT = 30;
+const AUTHENTICATED_PAIR_YOLO_INSPECTION_LIMIT = 150;
+const MAX_MERGED_PR_SEARCH_PAGES = 5;
+const PAIR_EXTRAORDINAIRE_GOLD_TARGET = achievements_1.ACHIEVEMENT_DEFINITIONS["pair-extraordinaire"].tiers[achievements_1.ACHIEVEMENT_DEFINITIONS["pair-extraordinaire"].tiers.length - 1]?.target ?? 48;
+const YOLO_DEFAULT_TARGET = achievements_1.ACHIEVEMENT_DEFINITIONS.yolo.tiers[achievements_1.ACHIEVEMENT_DEFINITIONS.yolo.tiers.length - 1]?.target ?? 1;
 function cacheTtlMs(hasToken) {
     const seconds = hasToken ? AUTH_CACHE_TTL_SECONDS : PUBLIC_CACHE_TTL_SECONDS;
     return Math.max(0, seconds) * 1000;
 }
 function normalizeUsername(input) {
     return input.trim().replace(/^@+/, "");
+}
+function hashTokenForCache(token) {
+    return (0, crypto_1.createHash)("sha256").update(token).digest("hex").slice(0, 12);
+}
+function isSameUserLogin(left, right) {
+    return left.trim().toLowerCase() === right.trim().toLowerCase();
 }
 function parseRepositoryFromApiUrl(repositoryUrl) {
     try {
@@ -41,21 +53,26 @@ function parseRepositoryFromApiUrl(repositoryUrl) {
 function buildSearchQuery(query) {
     return encodeURIComponent(query);
 }
-async function fetchAllOwnedRepos(username, rest) {
+async function fetchAllOwnedRepos(username, rest, useAuthenticatedSelfData) {
     const repos = [];
-    for (let page = 1; page <= 3; page += 1) {
-        const response = await rest(`/users/${encodeURIComponent(username)}/repos?type=owner&per_page=100&page=${page}`);
-        repos.push(...response);
+    const lowerUsername = username.toLowerCase();
+    for (let page = 1; page <= MAX_OWNED_REPO_PAGES; page += 1) {
+        const response = await rest(useAuthenticatedSelfData
+            ? `/user/repos?affiliation=owner&visibility=all&per_page=100&page=${page}`
+            : `/users/${encodeURIComponent(username)}/repos?type=owner&per_page=100&page=${page}`);
+        repos.push(...response.filter((repo) => repo.owner.login.toLowerCase() === lowerUsername));
         if (response.length < 100) {
             break;
         }
     }
     return repos;
 }
-async function fetchRecentEvents(username, rest) {
+async function fetchRecentEvents(username, rest, useAuthenticatedSelfData) {
     const events = [];
     for (let page = 1; page <= MAX_QUICKDRAW_EVENT_PAGES; page += 1) {
-        const response = await rest(`/users/${encodeURIComponent(username)}/events/public?per_page=100&page=${page}`);
+        const response = await rest(useAuthenticatedSelfData
+            ? `/users/${encodeURIComponent(username)}/events?per_page=100&page=${page}`
+            : `/users/${encodeURIComponent(username)}/events/public?per_page=100&page=${page}`);
         events.push(...response);
         if (response.length < 100) {
             break;
@@ -63,9 +80,28 @@ async function fetchRecentEvents(username, rest) {
     }
     return events;
 }
-async function fetchMergedPrSearch(username, rest) {
+async function fetchMergedPrSearchPage(username, rest, page) {
     const query = buildSearchQuery(`is:pr author:${username} is:merged sort:updated-desc`);
-    return rest(`/search/issues?q=${query}&per_page=100&page=1`);
+    return rest(`/search/issues?q=${query}&per_page=100&page=${page}`);
+}
+async function fetchMergedPrSearch(username, rest, inspectionLimit) {
+    const items = [];
+    let totalCount = 0;
+    const pagesToFetch = Math.min(MAX_MERGED_PR_SEARCH_PAGES, Math.max(1, Math.ceil(inspectionLimit / 100)));
+    for (let page = 1; page <= pagesToFetch; page += 1) {
+        const response = await fetchMergedPrSearchPage(username, rest, page);
+        if (page === 1) {
+            totalCount = response.total_count;
+        }
+        items.push(...response.items);
+        if (response.items.length < 100) {
+            break;
+        }
+    }
+    return {
+        totalCount,
+        items: items.slice(0, inspectionLimit),
+    };
 }
 function countQuickdrawMatches(username, events) {
     const lower = username.toLowerCase();
@@ -119,8 +155,11 @@ async function inspectPairAndYoloSignals(mergedPrItems, rest) {
     let yoloCount = 0;
     let inspectedPrs = 0;
     const notes = [];
-    const candidates = mergedPrItems.slice(0, MAX_PAIR_YOLO_INSPECTION);
-    for (const item of candidates) {
+    for (const item of mergedPrItems) {
+        if (pairCount >= PAIR_EXTRAORDINAIRE_GOLD_TARGET &&
+            yoloCount >= YOLO_DEFAULT_TARGET) {
+            break;
+        }
         const repoData = parseRepositoryFromApiUrl(item.repository_url);
         if (!repoData) {
             continue;
@@ -283,7 +322,7 @@ async function analyzeAchievementProgress(params) {
         throw new errors_1.AppError(400, "INVALID_USERNAME", "Username is required.");
     }
     const token = params.token?.trim() || undefined;
-    const cacheKey = `${username.toLowerCase()}:${token ? "auth" : "public"}`;
+    const cacheKey = `${username.toLowerCase()}:${token ? `auth:${hashTokenForCache(token)}` : "public"}`;
     const ttlMs = cacheTtlMs(Boolean(token));
     if (!params.forceRefresh && ttlMs > 0) {
         const cached = (0, cache_1.getCachedAnalyzeResult)(cacheKey);
@@ -295,9 +334,19 @@ async function analyzeAchievementProgress(params) {
         }
     }
     const client = (0, githubClient_1.createGitHubClient)(token);
+    const authenticatedViewer = token
+        ? await client.rest("/user")
+        : null;
+    const useAuthenticatedSelfData = Boolean(authenticatedViewer && isSameUserLogin(authenticatedViewer.login, username));
+    const pairAndYoloInspectionLimit = useAuthenticatedSelfData
+        ? AUTHENTICATED_PAIR_YOLO_INSPECTION_LIMIT
+        : PUBLIC_PAIR_YOLO_INSPECTION_LIMIT;
     let user;
     try {
-        user = await client.rest(`/users/${encodeURIComponent(username)}`);
+        user =
+            useAuthenticatedSelfData && authenticatedViewer
+                ? authenticatedViewer
+                : await client.rest(`/users/${encodeURIComponent(username)}`);
     }
     catch (error) {
         if (error instanceof errors_1.AppError && error.code === "GITHUB_NOT_FOUND") {
@@ -306,9 +355,9 @@ async function analyzeAchievementProgress(params) {
         throw error;
     }
     const [repos, events, mergedPrSearch, galaxyEstimate, sponsorResult] = await Promise.all([
-        fetchAllOwnedRepos(username, client.rest),
-        fetchRecentEvents(username, client.rest),
-        fetchMergedPrSearch(username, client.rest),
+        fetchAllOwnedRepos(username, client.rest, useAuthenticatedSelfData),
+        fetchRecentEvents(username, client.rest, useAuthenticatedSelfData),
+        fetchMergedPrSearch(username, client.rest, pairAndYoloInspectionLimit),
         getGalaxyBrainEstimate(username, client.rest),
         getPublicSponsorStatus(username, token),
     ]);
@@ -323,9 +372,15 @@ async function analyzeAchievementProgress(params) {
     const quickdrawStats = countQuickdrawMatches(username, events);
     const limitations = [
         "Achievement progress is estimated where GitHub does not publish official badge counters.",
-        "Private activity may be missing when no token is provided.",
-        "Quickdraw uses recent public event history and may not include older events.",
-        `Pair Extraordinaire and YOLO inspect up to ${MAX_PAIR_YOLO_INSPECTION} recent merged PRs per sync.`,
+        useAuthenticatedSelfData
+            ? "Authenticated self-analysis is enabled. Private repositories, private pull requests, and private events are included when the token can access them."
+            : token && authenticatedViewer
+                ? `Token belongs to @${authenticatedViewer.login}, so progress for @${username} is limited mostly to public activity. Use a token from the analyzed account for the best coverage.`
+                : "Private activity may be missing when no token is provided.",
+        useAuthenticatedSelfData
+            ? "Quickdraw uses your authenticated event feed, but GitHub events can still be delayed and older events can fall out of the event history window."
+            : "Quickdraw uses recent public event history and may not include older or private events.",
+        `Pair Extraordinaire and YOLO inspect up to ${pairAndYoloInspectionLimit} recent merged PRs per sync.`,
     ];
     if (galaxyEstimate.limitation) {
         limitations.push(galaxyEstimate.limitation);
@@ -341,28 +396,50 @@ async function analyzeAchievementProgress(params) {
             highestStarredRepo: highestRepo?.name ?? "None",
             highestStarredRepoUrl: highestRepo?.html_url ?? null,
             currentStarCount: starstruckValue,
-        }, true, "Estimated from your highest-starred owned repository."),
+            repoVisibilityChecked: useAuthenticatedSelfData
+                ? "public and private owned repositories"
+                : "public owned repositories only",
+        }, true, useAuthenticatedSelfData
+            ? "Estimated from your highest-starred owned repository, including private repos visible to your token."
+            : "Estimated from your highest-starred public owned repository."),
         buildAchievement("quickdraw", quickdrawStats.count, {
             qualifyingQuickCloses: quickdrawStats.count,
             eventsInspected: quickdrawStats.inspectedEvents,
+            eventVisibilityChecked: useAuthenticatedSelfData
+                ? "public and private recent events"
+                : "public recent events only",
             sampleMatches: quickdrawStats.samples.join(", ") ||
                 "No qualifying quick closes found",
-        }, true, "Estimated from recent public IssuesEvent and PullRequestEvent data."),
+        }, true, useAuthenticatedSelfData
+            ? "Estimated from recent authenticated IssuesEvent and PullRequestEvent data, including private events returned by GitHub for your account."
+            : "Estimated from recent public IssuesEvent and PullRequestEvent data."),
         buildAchievement("pair-extraordinaire", pairAndYoloInspection.pairCount, {
             qualifyingMergedPrs: pairAndYoloInspection.pairCount,
             mergedPrsInspected: pairAndYoloInspection.inspectedPrs,
-        }, true, `Estimated from co-authored commit metadata in up to ${MAX_PAIR_YOLO_INSPECTION} recent merged PRs.`),
-        buildAchievement("pull-shark", mergedPrSearch.total_count, {
-            totalMergedPrs: mergedPrSearch.total_count,
-        }, true, "Estimated from GitHub pull-request search results."),
+            inspectionWindow: `${pairAndYoloInspectionLimit} most recent merged PRs`,
+        }, true, `Estimated from co-authored commit metadata in up to ${pairAndYoloInspectionLimit} recent merged PRs.`),
+        buildAchievement("pull-shark", mergedPrSearch.totalCount, {
+            totalMergedPrs: mergedPrSearch.totalCount,
+            searchVisibilityChecked: useAuthenticatedSelfData
+                ? "token-accessible public and private pull requests"
+                : "public pull requests only",
+        }, true, useAuthenticatedSelfData
+            ? "Estimated from GitHub pull-request search results, including private pull requests visible to your token."
+            : "Estimated from GitHub pull-request search results."),
         buildAchievement("galaxy-brain", galaxyEstimate.count, {
             acceptedDiscussionAnswers: galaxyEstimate.count,
+            discussionVisibilityChecked: useAuthenticatedSelfData
+                ? "token-accessible public and private discussions"
+                : "public discussions only",
         }, true, galaxyEstimate.limitation ??
-            "Estimated from answered discussion search because official counters are not fully exposed."),
+            (useAuthenticatedSelfData
+                ? "Estimated from discussion search, including private results visible to your token, because official counters are not fully exposed."
+                : "Estimated from answered discussion search because official counters are not fully exposed.")),
         buildAchievement("yolo", pairAndYoloInspection.yoloCount, {
             unreviewedMergedPrs: pairAndYoloInspection.yoloCount,
             mergedPrsInspected: pairAndYoloInspection.inspectedPrs,
-        }, true, `Estimated from review activity in up to ${MAX_PAIR_YOLO_INSPECTION} recent merged PRs.`),
+            inspectionWindow: `${pairAndYoloInspectionLimit} most recent merged PRs`,
+        }, true, `Estimated from review activity in up to ${pairAndYoloInspectionLimit} recent merged PRs.`),
         buildAchievement("public-sponsor", sponsorResult.count, {
             publicSponsorshipsDetected: sponsorResult.count,
             verificationStatus: sponsorResult.verificationStatus,

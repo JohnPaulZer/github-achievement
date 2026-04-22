@@ -438,7 +438,9 @@ function App() {
 
             <div className="md:col-span-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-200">
               Token is optional and never stored in any database. It is used in
-              memory only for the current analysis request.
+              memory only for the current analysis request. For the most
+              accurate private achievement progress, use a token from the same
+              GitHub account you are analyzing.
             </div>
 
             <label className="flex flex-col gap-2">

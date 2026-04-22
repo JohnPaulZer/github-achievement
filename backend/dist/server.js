@@ -6,36 +6,54 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const cors_1 = __importDefault(require("cors"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const express_1 = __importDefault(require("express"));
-const mongoose_1 = __importDefault(require("mongoose"));
+const errors_1 = require("./lib/errors");
+const achievementRoutes_1 = __importDefault(require("./routes/achievementRoutes"));
+const syncRoutes_1 = __importDefault(require("./routes/syncRoutes"));
+const webhookRoutes_1 = __importDefault(require("./routes/webhookRoutes"));
 dotenv_1.default.config();
 const app = (0, express_1.default)();
-const port = Number(process.env.PORT) || 5000;
-const mongoUri = process.env.MONGODB_URI;
-app.use((0, cors_1.default)());
-app.use(express_1.default.json());
-app.get('/api/health', (_req, res) => {
-    res.status(200).json({ ok: true, service: 'backend', timestamp: new Date().toISOString() });
-});
-async function startServer() {
-    if (mongoUri) {
-        try {
-            await mongoose_1.default.connect(mongoUri);
-            console.log('MongoDB connected');
-        }
-        catch (error) {
-            console.warn('MongoDB connection failed, continuing without DB connection.');
-            console.warn(error);
-        }
-    }
-    else {
-        console.warn('MONGODB_URI is not set. Running without a database connection.');
-    }
-    app.listen(port, () => {
-        console.log(`Backend server running on http://localhost:${port}`);
+const port = Number(process.env.PORT) || 5050;
+const corsOrigin = process.env.CORS_ORIGIN ?? "*";
+app.use((0, cors_1.default)({
+    origin: corsOrigin === "*"
+        ? true
+        : corsOrigin.split(",").map((origin) => origin.trim()),
+    credentials: false,
+}));
+app.use(express_1.default.json({
+    limit: "1mb",
+    verify: (req, _res, buffer) => {
+        req.rawBody = Buffer.from(buffer);
+    },
+}));
+app.get("/api/health", (_req, res) => {
+    res.status(200).json({
+        ok: true,
+        service: "backend",
+        timestamp: new Date().toISOString(),
     });
-}
-startServer().catch((error) => {
-    console.error('Failed to start server:', error);
-    process.exit(1);
+});
+app.use("/api/achievements", achievementRoutes_1.default);
+app.use("/api/sync", syncRoutes_1.default);
+app.use("/api/webhooks", webhookRoutes_1.default);
+app.use((error, _req, res, _next) => {
+    if ((0, errors_1.isAppError)(error)) {
+        res.status(error.statusCode).json({
+            ok: false,
+            code: error.code,
+            message: error.message,
+            details: error.details ?? null,
+        });
+        return;
+    }
+    console.error("Unhandled server error:", error);
+    res.status(500).json({
+        ok: false,
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Unexpected server error occurred.",
+    });
+});
+app.listen(port, () => {
+    console.log(`Backend server running on http://localhost:${port}`);
 });
 //# sourceMappingURL=server.js.map

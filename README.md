@@ -4,6 +4,8 @@
 
 This web app analyzes a GitHub user's achievement progress and displays it as a clean live counter dashboard.
 
+Important: this dashboard is an estimate, not an official GitHub badge counter. Some values can be delayed, rounded to a tier floor, or differ from GitHub's internal achievement data.
+
 It is made for tracking GitHub profile achievements such as:
 
 - Starstruck
@@ -34,7 +36,7 @@ The app checks GitHub activity and estimates achievement progress by combining:
 - Public sponsorship/profile information
 - Recent events, pull requests, reviews, commits, discussions, and repositories
 
-The backend tries to make counters more accurate by using official profile badge data as a minimum floor when GitHub does not expose the exact badge counter directly.
+The backend tries to make counters more accurate by using official profile badge data as a minimum floor when GitHub does not expose the exact badge counter directly, but the results should still be treated as best-effort estimates.
 
 ## Achievements Tracked
 
@@ -229,7 +231,9 @@ Current security features:
 ## Notes
 
 - GitHub does not expose every official achievement counter directly.
-- Some values are estimates.
+- This web app is not an official GitHub achievement source.
+- Some values are estimates and may not exactly match GitHub's internal counters.
+- Recently accepted answers, merged pull requests, or other profile activity can take time to appear.
 - Public profile badges are used as a lower-bound source when available.
 - Quickdraw depends on recent event history and may miss older activity.
 - Private repositories require a token with access to those repositories.
@@ -244,4 +248,4 @@ Current security features:
 
 ## Summary
 
-GitHub Achievement Counter is a full-stack React and Express app for analyzing GitHub achievement progress. It helps users see which GitHub achievements are unlocked, which tier they are on, how close they are to the next tier, and what GitHub activity was detected to calculate each badge.
+GitHub Achievement Counter is a full-stack React and Express app for estimating GitHub achievement progress. It helps users see which GitHub achievements appear unlocked, which tier they are on, how close they may be to the next tier, and what GitHub activity was detected to calculate each badge.

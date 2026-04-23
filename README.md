@@ -238,14 +238,9 @@ Current security features:
 - GitHub API rate limits still apply even with a token.
 
 ## Screenshots
+<img width="1677" height="959" alt="Screenshot 2026-04-23 182806" src="https://github.com/user-attachments/assets/353fe196-b39e-450b-9ff7-305dfd38f4d9" />
+<img width="1680" height="1453" alt="screencapture-github-achievement-vercel-app-2026-04-23-18_50_58" src="https://github.com/user-attachments/assets/b8531211-a733-40a9-af3b-86b6eb1e0668" />
 
-Add screenshots of the app here after deployment or final UI capture:
-
-```text
-docs/screenshots/dashboard.png
-docs/screenshots/details-modal.png
-docs/screenshots/token-tutorial.png
-```
 
 ## Summary
 

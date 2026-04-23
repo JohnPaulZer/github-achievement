@@ -47,6 +47,89 @@ function DetailLabel({ children }: { children: string }) {
   );
 }
 
+type CardTone = "default" | "bronze" | "silver" | "gold";
+
+const tierCardStyles: Record<
+  CardTone,
+  {
+    card: string;
+    topLine: string;
+    surface: string;
+    button: string;
+    detailPercent: string;
+    detailTierChip: string;
+  }
+> = {
+  default: {
+    card:
+      "border-sky-200/95 bg-[linear-gradient(180deg,rgba(238,247,255,0.99),rgba(214,233,255,0.96))] dark:border-sky-400/18 dark:bg-[linear-gradient(180deg,rgba(16,28,49,0.96),rgba(20,41,69,0.96))]",
+    topLine:
+      "bg-gradient-to-r from-transparent via-sky-300 to-transparent dark:via-sky-300/40",
+    surface:
+      "border-sky-200/90 bg-[rgba(255,255,255,0.74)] dark:border-sky-400/18 dark:bg-[rgba(8,18,36,0.56)]",
+    button:
+      "border-sky-200/90 bg-[rgba(255,255,255,0.82)] text-slate-700 hover:border-sky-300 hover:bg-white dark:border-sky-400/18 dark:bg-[rgba(7,17,34,0.82)] dark:text-slate-100 dark:hover:bg-[rgba(16,31,57,0.95)]",
+    detailPercent:
+      "border-sky-300/90 bg-sky-100/90 text-sky-700 dark:border-sky-300/28 dark:bg-sky-400/16 dark:text-sky-100",
+    detailTierChip: "bg-sky-100/85 dark:bg-sky-400/14",
+  },
+  bronze: {
+    card:
+      "border-amber-200/95 bg-[linear-gradient(180deg,rgba(255,245,235,0.99),rgba(255,220,190,0.97))] dark:border-amber-400/22 dark:bg-[linear-gradient(180deg,rgba(40,28,22,0.97),rgba(73,44,25,0.97))]",
+    topLine:
+      "bg-gradient-to-r from-transparent via-amber-300 to-transparent dark:via-amber-300/46",
+    surface:
+      "border-amber-200/90 bg-[rgba(255,250,246,0.74)] dark:border-amber-400/22 dark:bg-[rgba(69,43,27,0.7)]",
+    button:
+      "border-amber-200/90 bg-[rgba(255,252,248,0.84)] text-slate-700 hover:border-amber-300 hover:bg-white dark:border-amber-400/22 dark:bg-[rgba(42,26,18,0.9)] dark:text-slate-100 dark:hover:bg-[rgba(61,39,25,0.96)]",
+    detailPercent:
+      "border-amber-300/90 bg-amber-100/90 text-amber-700 dark:border-amber-300/28 dark:bg-amber-400/16 dark:text-amber-100",
+    detailTierChip: "bg-amber-100/85 dark:bg-amber-400/14",
+  },
+  silver: {
+    card:
+      "border-slate-300/95 bg-[linear-gradient(180deg,rgba(247,250,255,0.99),rgba(222,231,244,0.97))] dark:border-slate-400/22 dark:bg-[linear-gradient(180deg,rgba(24,31,44,0.97),rgba(44,56,74,0.97))]",
+    topLine:
+      "bg-gradient-to-r from-transparent via-slate-300 to-transparent dark:via-slate-300/44",
+    surface:
+      "border-slate-300/90 bg-[rgba(255,255,255,0.76)] dark:border-slate-400/22 dark:bg-[rgba(37,48,64,0.76)]",
+    button:
+      "border-slate-300/90 bg-[rgba(255,255,255,0.84)] text-slate-700 hover:border-slate-400 hover:bg-white dark:border-slate-400/22 dark:bg-[rgba(18,26,39,0.92)] dark:text-slate-100 dark:hover:bg-[rgba(40,52,69,0.96)]",
+    detailPercent:
+      "border-slate-300/90 bg-slate-100/95 text-slate-700 dark:border-slate-300/28 dark:bg-slate-400/16 dark:text-slate-100",
+    detailTierChip: "bg-slate-100/88 dark:bg-slate-400/14",
+  },
+  gold: {
+    card:
+      "border-yellow-200/95 bg-[linear-gradient(180deg,rgba(255,252,232,0.99),rgba(255,235,166,0.97))] dark:border-yellow-400/22 dark:bg-[linear-gradient(180deg,rgba(43,34,18,0.97),rgba(78,61,27,0.97))]",
+    topLine:
+      "bg-gradient-to-r from-transparent via-yellow-300 to-transparent dark:via-yellow-300/46",
+    surface:
+      "border-yellow-200/90 bg-[rgba(255,252,243,0.76)] dark:border-yellow-400/22 dark:bg-[rgba(68,53,24,0.74)]",
+    button:
+      "border-yellow-200/90 bg-[rgba(255,253,247,0.84)] text-slate-700 hover:border-yellow-300 hover:bg-white dark:border-yellow-400/22 dark:bg-[rgba(40,31,15,0.92)] dark:text-slate-100 dark:hover:bg-[rgba(60,47,21,0.96)]",
+    detailPercent:
+      "border-yellow-300/90 bg-yellow-100/92 text-yellow-700 dark:border-yellow-300/28 dark:bg-yellow-400/16 dark:text-yellow-100",
+    detailTierChip: "bg-yellow-100/88 dark:bg-yellow-400/14",
+  },
+};
+
+function getCardTone(currentTier: AchievementResult["currentTier"]): CardTone {
+  if (currentTier === "Bronze") {
+    return "bronze";
+  }
+
+  if (currentTier === "Silver") {
+    return "silver";
+  }
+
+  if (currentTier === "Gold") {
+    return "gold";
+  }
+
+  return "default";
+}
+
 function AchievementCard({
   achievement,
   highlighted = false,
@@ -56,6 +139,8 @@ function AchievementCard({
   const previousValueRef = useRef(0);
   const dialogTitleId = useId();
   const badgeImageSrc = resolveBadgeImage(achievement);
+  const cardTone = getCardTone(achievement.currentTier);
+  const cardStyles = tierCardStyles[cardTone];
 
   useEffect(() => {
     const reduceMotion = window.matchMedia(
@@ -165,16 +250,20 @@ function AchievementCard({
               {achievement.currentValue.toLocaleString()}
             </p>
           </div>
-          <span className="rounded-full border border-sky-200/80 bg-sky-50/80 px-3 py-1 text-xs font-semibold text-sky-700 dark:border-sky-300/20 dark:bg-sky-400/10 dark:text-sky-200">
+          <span
+            className={`rounded-full border px-3 py-1 text-xs font-semibold ${cardStyles.detailPercent}`}
+          >
             {achievement.progressPercent.toFixed(0)}%
           </span>
         </div>
-        <ProgressBar value={achievement.progressPercent} />
+        <ProgressBar value={achievement.progressPercent} tone={cardTone} />
         <div className="mt-3 grid gap-2 text-xs text-slate-600 dark:text-slate-300 sm:grid-cols-2">
           <p className="rounded-[0.8rem] bg-slate-50/85 px-3 py-2 dark:bg-slate-800/70">
             Current: {achievement.currentTier}
           </p>
-          <p className="rounded-[0.8rem] bg-sky-50/75 px-3 py-2 dark:bg-sky-400/10">
+          <p
+            className={`rounded-[0.8rem] px-3 py-2 ${cardStyles.detailTierChip}`}
+          >
             {tierSummary}
           </p>
         </div>
@@ -245,11 +334,13 @@ function AchievementCard({
   return (
     <>
       <article
-        className={`group relative flex min-h-[390px] flex-col overflow-hidden rounded-[1.55rem] border border-white/75 bg-[rgba(248,251,255,0.76)] px-4 py-4 text-slate-900 shadow-[0_18px_42px_rgba(148,163,184,0.16)] backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:shadow-[0_24px_54px_rgba(148,163,184,0.2)] dark:border-white/10 dark:bg-[rgba(15,23,42,0.82)] dark:text-slate-100 dark:shadow-[0_18px_42px_rgba(2,6,23,0.3)] dark:hover:shadow-[0_24px_54px_rgba(2,6,23,0.42)] ${
+        className={`group relative flex min-h-[390px] flex-col overflow-hidden rounded-[1.55rem] border px-4 py-4 text-slate-900 shadow-[0_18px_42px_rgba(148,163,184,0.16)] backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:shadow-[0_24px_54px_rgba(148,163,184,0.2)] dark:text-slate-100 dark:shadow-[0_18px_42px_rgba(2,6,23,0.3)] dark:hover:shadow-[0_24px_54px_rgba(2,6,23,0.42)] ${cardStyles.card} ${
           highlighted ? "achievement-highlight" : ""
         }`}
       >
-        <div className="pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-white/90 to-transparent dark:via-sky-300/20" />
+        <div
+          className={`pointer-events-none absolute inset-x-4 top-0 h-px ${cardStyles.topLine}`}
+        />
 
         <div className="flex items-start justify-between gap-3">
           <img
@@ -273,7 +364,7 @@ function AchievementCard({
           </p>
         </div>
 
-        <div className="mt-4 rounded-[1.05rem] border border-slate-200/70 bg-white/62 p-3 dark:border-white/10 dark:bg-[rgba(2,6,23,0.42)]">
+        <div className={`mt-4 rounded-[1.05rem] border p-3 ${cardStyles.surface}`}>
           <div className="mb-2 flex items-center justify-between gap-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-300">
             <span>
               {achievement.currentTier === "None"
@@ -282,7 +373,7 @@ function AchievementCard({
             </span>
             <span>{achievement.progressPercent.toFixed(0)}%</span>
           </div>
-          <ProgressBar value={achievement.progressPercent} />
+          <ProgressBar value={achievement.progressPercent} tone={cardTone} />
           <div className="mt-2.5 flex items-center justify-between gap-3 text-[11px] text-slate-600 dark:text-slate-200 sm:text-xs">
             <span>{progressCopy}</span>
             <span>
@@ -313,7 +404,7 @@ function AchievementCard({
 
         <button
           type="button"
-          className="mt-auto w-full rounded-full border border-slate-200/80 bg-white/70 px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.16em] text-slate-700 transition hover:border-slate-300 hover:bg-white dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-100 dark:hover:bg-slate-800/90"
+          className={`mt-auto w-full rounded-full border px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.16em] transition ${cardStyles.button}`}
           onClick={() => setDetailsOpen(true)}
         >
           Show Details

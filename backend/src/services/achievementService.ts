@@ -235,9 +235,7 @@ function parsePublicSponsoringCount(html: string): number | null {
     return titleCount;
   }
 
-  return parseIntegerText(
-    sponsoringTabMatch[1].replace(/<[^>]+>/g, "").trim(),
-  );
+  return parseIntegerText(sponsoringTabMatch[1].replace(/<[^>]+>/g, "").trim());
 }
 
 async function fetchPublicProfileAchievementSnapshot(
@@ -348,7 +346,8 @@ async function fetchAllOwnedRepos(
     repos.push(
       ...response.filter(
         // Exclude forks — Starstruck only counts repos the user originally created
-        (repo) => repo.owner.login.toLowerCase() === lowerUsername && !repo.fork,
+        (repo) =>
+          repo.owner.login.toLowerCase() === lowerUsername && !repo.fork,
       ),
     );
 
@@ -633,10 +632,11 @@ async function countPairExtraordinaireViaGraphQL(
 
   for (let page = 0; page < PAIR_GRAPHQL_MAX_PAGES; page += 1) {
     try {
-      const result: PairExtraordinaireGraphQL = await graphql<PairExtraordinaireGraphQL>(query, {
-        username,
-        cursor,
-      });
+      const result: PairExtraordinaireGraphQL =
+        await graphql<PairExtraordinaireGraphQL>(query, {
+          username,
+          cursor,
+        });
 
       const prs = result.user?.pullRequests;
       if (!prs) break;
@@ -689,8 +689,7 @@ async function getGalaxyBrainEstimate(
 
   try {
     const result = await graphql<GalaxyBrainGraphQL>(query, { username });
-    const count =
-      result.user?.repositoryDiscussionComments.totalCount ?? 0;
+    const count = result.user?.repositoryDiscussionComments.totalCount ?? 0;
 
     return { count, available: true };
   } catch (error) {
@@ -859,7 +858,10 @@ function buildRateLimitedFallback(
   return {
     ...cachedPayload,
     cacheHit: true,
-    apiLimitations: dedupeStrings([retryMessage, ...cachedPayload.apiLimitations]),
+    apiLimitations: dedupeStrings([
+      retryMessage,
+      ...cachedPayload.apiLimitations,
+    ]),
   };
 }
 
@@ -876,7 +878,9 @@ export async function analyzeAchievementProgress(
   }
 
   const requestToken = params.token?.trim() || undefined;
-  const serverToken = requestToken ? undefined : SERVER_GITHUB_TOKEN || undefined;
+  const serverToken = requestToken
+    ? undefined
+    : SERVER_GITHUB_TOKEN || undefined;
   const token = requestToken ?? serverToken;
   const cacheScope = requestToken
     ? `auth:${hashTokenForCache(requestToken)}`
@@ -909,7 +913,7 @@ export async function analyzeAchievementProgress(
       const usingServerToken = Boolean(serverToken);
       const useAuthenticatedSelfData = Boolean(
         authenticatedViewer &&
-          isSameUserLogin(authenticatedViewer.login, username),
+        isSameUserLogin(authenticatedViewer.login, username),
       );
       const pairAndYoloInspectionLimit = useAuthenticatedSelfData
         ? AUTHENTICATED_PAIR_YOLO_INSPECTION_LIMIT
@@ -944,22 +948,18 @@ export async function analyzeAchievementProgress(
         pairGraphqlResult,
         profileAchievementSnapshot,
       ] = await Promise.all([
-          fetchAllOwnedRepos(username, client.rest, useAuthenticatedSelfData),
-          fetchRecentEvents(username, client.rest, useAuthenticatedSelfData),
-          fetchMergedPrSearch(
-            username,
-            client.rest,
-            pairAndYoloInspectionLimit,
-          ),
-          // Galaxy Brain: must use GraphQL — REST /search/issues does not index Discussions
-          getGalaxyBrainEstimate(username, client.graphql),
-          // Public Sponsor: pass the shared client so any token (server or user) is accepted
-          getPublicSponsorStatus(username, client, token),
-          // Pair Extraordinaire: GraphQL reaches private PRs the REST search misses
-          countPairExtraordinaireViaGraphQL(username, client.graphql),
-          // Public profile badges are the closest available signal to GitHub's official achievement state.
-          fetchPublicProfileAchievementSnapshot(username),
-        ]);
+        fetchAllOwnedRepos(username, client.rest, useAuthenticatedSelfData),
+        fetchRecentEvents(username, client.rest, useAuthenticatedSelfData),
+        fetchMergedPrSearch(username, client.rest, pairAndYoloInspectionLimit),
+        // Galaxy Brain: must use GraphQL — REST /search/issues does not index Discussions
+        getGalaxyBrainEstimate(username, client.graphql),
+        // Public Sponsor: pass the shared client so any token (server or user) is accepted
+        getPublicSponsorStatus(username, client, token),
+        // Pair Extraordinaire: GraphQL reaches private PRs the REST search misses
+        countPairExtraordinaireViaGraphQL(username, client.graphql),
+        // Public profile badges are the closest available signal to GitHub's official achievement state.
+        fetchPublicProfileAchievementSnapshot(username),
+      ]);
 
       const pairAndYoloInspection = await inspectPairAndYoloSignals(
         mergedPrSearch.items,
@@ -1090,7 +1090,7 @@ export async function analyzeAchievementProgress(
             ? `Token belongs to @${authenticatedViewer.login}, so progress for @${username} is limited mostly to public activity. Use a token from the analyzed account for the best coverage.`
             : usingServerToken
               ? "Server GitHub token is enabled for higher API limits. Private activity is still unavailable unless you analyze with a token from the same GitHub account."
-            : "Private activity may be missing when no token is provided.",
+              : "Private activity may be missing when no token is provided.",
         useAuthenticatedSelfData
           ? "Quickdraw uses your authenticated event feed, but GitHub events can still be delayed and older events can fall out of the event history window."
           : "Quickdraw uses recent public event history and may not include older or private events.",
@@ -1282,6 +1282,7 @@ export async function analyzeAchievementProgress(
         ),
       ];
 
+      // API limitations and estimation notes are included in the response for transparency, but the raw detected values and official profile badge floors are also included in the detectedStats of each achievement for clients that want to build their own UI or messaging around the limitations.
       const now = new Date();
       const payload: AnalyzeResponse = {
         profile: {

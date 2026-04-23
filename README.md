@@ -22,7 +22,7 @@ Public GitHub data works without a token. A GitHub token improves accuracy, rais
 
 Deployed app:
 
-[https://github-achievement.vercel.app/](https://github-achievement.vercel.app/)
+https://gitbadgecheck.vercel.app/
 
 ## What The App Does
 

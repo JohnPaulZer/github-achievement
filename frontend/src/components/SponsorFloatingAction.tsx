@@ -24,11 +24,11 @@ function SponsorFloatingAction() {
     >
       <motion.span
         animate={reduceMotion ? undefined : { x: [0, 3, 0, 0] }}
-        className="pointer-events-none relative hidden rounded-full border border-white/80 bg-white/90 px-4 py-2 text-xs font-semibold text-slate-800 shadow-[0_14px_34px_rgba(71,85,105,0.16)] backdrop-blur-xl sm:inline-flex"
+        className="pointer-events-none relative hidden rounded-full border border-white/80 bg-white/90 px-4 py-2 text-xs font-semibold text-slate-800 shadow-[0_14px_34px_rgba(71,85,105,0.16)] backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/90 dark:text-slate-100 sm:inline-flex"
         transition={pokeTransition}
       >
         Support JohnPaulZer
-        <span className="absolute -right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 rotate-45 border-r border-t border-white/80 bg-white/90" />
+        <span className="absolute -right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 rotate-45 border-r border-t border-white/80 bg-white/90 dark:border-white/10 dark:bg-slate-900/90" />
       </motion.span>
 
       <motion.span
@@ -79,9 +79,9 @@ function SponsorFloatingAction() {
           <path d="M20.8 4.6c-1.9-1.8-4.9-1.7-6.7.2L12 7l-2.1-2.2C8.1 2.9 5.1 2.8 3.2 4.6 1.2 6.5 1.2 9.7 3 11.6l9 8.9 9-8.9c1.8-1.9 1.8-5.1-.2-7Z" />
         </motion.svg>
 
-        <span className="pointer-events-none absolute bottom-full right-0 mb-3 w-64 translate-y-1 rounded-[1rem] border border-white/80 bg-white/95 px-4 py-3 text-left text-xs font-medium leading-5 text-slate-700 opacity-0 shadow-[0_18px_42px_rgba(71,85,105,0.18)] backdrop-blur-xl transition duration-200 group-hover:translate-y-0 group-hover:opacity-100">
+        <span className="pointer-events-none absolute bottom-full right-0 mb-3 w-64 translate-y-1 rounded-[1rem] border border-white/80 bg-white/95 px-4 py-3 text-left text-xs font-medium leading-5 text-slate-700 opacity-0 shadow-[0_18px_42px_rgba(71,85,105,0.18)] backdrop-blur-xl transition duration-200 group-hover:translate-y-0 group-hover:opacity-100 dark:border-white/10 dark:bg-slate-900/95 dark:text-slate-200">
           Support JohnPaulZer with a minimum of $1 and get the sponsor badge.
-          <span className="absolute -bottom-1.5 right-4 h-3 w-3 rotate-45 border-b border-r border-white/80 bg-white/95" />
+          <span className="absolute -bottom-1.5 right-4 h-3 w-3 rotate-45 border-b border-r border-white/80 bg-white/95 dark:border-white/10 dark:bg-slate-900/95" />
         </span>
       </motion.span>
     </motion.a>

@@ -1,6 +1,14 @@
-import type { FormEvent } from "react";
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { AnimatedList } from "@/components/ui/animated-list";
+import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
+import type { FormEvent } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   analyzeAchievements,
   API_BASE_URL,
@@ -33,6 +41,21 @@ const geometricGridStyle = {
     linear-gradient(to right, rgba(0,0,0,0.06) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(0,0,0,0.06) 1px, transparent 1px),
     radial-gradient(circle, rgba(51,65,85,0.4) 1px, transparent 1px)
+  `,
+  backgroundSize: "20px 20px, 20px 20px, 20px 20px",
+  backgroundPosition: "0 0, 0 0, 0 0",
+};
+
+const midnightSkyStyle = {
+  background:
+    "linear-gradient(225deg, #0f172a 0%, #111827 32%, #1e1b4b 68%, #312e81 100%)",
+};
+
+const darkGeometricGridStyle = {
+  backgroundImage: `
+    linear-gradient(to right, rgba(255,255,255,0.055) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255,255,255,0.055) 1px, transparent 1px),
+    radial-gradient(circle, rgba(186,230,253,0.2) 1px, transparent 1px)
   `,
   backgroundSize: "20px 20px, 20px 20px, 20px 20px",
   backgroundPosition: "0 0, 0 0, 0 0",
@@ -163,9 +186,12 @@ function App() {
             window.clearTimeout(notificationTimerRef.current);
           }
 
-          notificationTimerRef.current = window.setTimeout(() => {
-            setNotifications([]);
-          }, 4000 + changeResult.notifications.length * 1000);
+          notificationTimerRef.current = window.setTimeout(
+            () => {
+              setNotifications([]);
+            },
+            4000 + changeResult.notifications.length * 1000,
+          );
         }
 
         if (changeResult.changedIds.length > 0) {
@@ -347,74 +373,91 @@ function App() {
   };
 
   return (
-    <main className="relative min-h-screen w-full overflow-hidden bg-white px-4 py-8 text-slate-900 sm:px-6 lg:px-8">
-      <div className="absolute inset-0 z-0" style={cottonCandySkyStyle} />
+    <main className="relative min-h-screen w-full overflow-hidden bg-white px-4 py-8 text-slate-900 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-100 sm:px-6 lg:px-8">
       <div
-        className="absolute inset-0 z-0 opacity-70"
+        className="absolute inset-0 z-0 dark:hidden"
+        style={cottonCandySkyStyle}
+      />
+      <div
+        className="absolute inset-0 z-0 opacity-70 dark:hidden"
         style={geometricGridStyle}
+      />
+      <div
+        className="absolute inset-0 z-0 hidden dark:block"
+        style={midnightSkyStyle}
+      />
+      <div
+        className="absolute inset-0 z-0 hidden opacity-70 dark:block"
+        style={darkGeometricGridStyle}
       />
       <div className="relative z-10 mx-auto flex max-w-7xl flex-col gap-6">
         <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.34em] text-slate-500 sm:text-sm">
-              GitHub Counter Board
+            <p className="text-xs font-semibold uppercase tracking-[0.34em] text-slate-500 dark:text-slate-400 sm:text-sm">
+              GitHub Achievement Tracker
             </p>
-            <h1 className="mt-2 text-2xl font-semibold uppercase tracking-[0.12em] text-slate-900 sm:text-4xl">
-              Achievement Counter
+            <h1 className="mt-2 text-2xl font-semibold uppercase tracking-[0.12em] text-slate-900 dark:text-white sm:text-4xl">
+              Achievement Tracker
             </h1>
-            <p className="mt-3 max-w-2xl text-xs leading-6 text-slate-600 sm:text-sm">
-              Analyze a profile and keep the achievement counters in one clean
+            <p className="mt-3 max-w-2xl text-xs leading-6 text-slate-600 dark:text-slate-300 sm:text-sm">
+              Analyze a profile and keep the achievement tracker in one clean
               view.
             </p>
           </div>
 
-          {dashboard?.profile ? (
-            <a
-              href={dashboard.profile.profileUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex w-fit items-center gap-3 rounded-full border border-white/80 bg-white/75 py-2 pl-2 pr-4 text-sm text-slate-700 shadow-sm backdrop-blur-xl transition hover:bg-white"
-            >
-              <img
-                src={dashboard.profile.avatarUrl}
-                alt={`${dashboard.profile.username} avatar`}
-                className="h-10 w-10 rounded-full border border-white object-cover"
-              />
-              <span>
-                <span className="block font-semibold text-slate-900">
-                  {dashboard.profile.name ?? dashboard.profile.username}
+          <div className="flex flex-wrap items-center gap-3">
+            {dashboard?.profile ? (
+              <a
+                href={dashboard.profile.profileUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex w-fit items-center gap-3 rounded-full border border-white/80 bg-white/75 py-2 pl-2 pr-4 text-sm text-slate-700 shadow-sm backdrop-blur-xl transition hover:bg-white dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-300 dark:hover:bg-slate-800/90"
+              >
+                <img
+                  src={dashboard.profile.avatarUrl}
+                  alt={`${dashboard.profile.username} avatar`}
+                  className="h-10 w-10 rounded-full border border-white object-cover dark:border-white/20"
+                />
+                <span>
+                  <span className="block font-semibold text-slate-900 dark:text-white">
+                    {dashboard.profile.name ?? dashboard.profile.username}
+                  </span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    @{dashboard.profile.username}
+                  </span>
                 </span>
-                <span className="text-xs text-slate-500">
-                  @{dashboard.profile.username}
-                </span>
-              </span>
-            </a>
-          ) : null}
+              </a>
+            ) : null}
+            <AnimatedThemeToggler
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/80 bg-white/75 text-slate-700 shadow-sm backdrop-blur-xl transition hover:bg-white hover:text-slate-950 dark:border-white/10 dark:bg-slate-900/75 dark:text-slate-200 dark:hover:bg-slate-800"
+              variant="circle"
+            />
+          </div>
         </header>
 
         <form
-          className="grid grid-cols-1 gap-3 rounded-[1.4rem] border border-white/70 bg-white/72 p-3 shadow-[0_18px_44px_rgba(148,163,184,0.18)] backdrop-blur-xl md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto] md:items-end"
+          className="grid grid-cols-1 gap-3 rounded-[1.4rem] border border-white/70 bg-white/72 p-3 shadow-[0_18px_44px_rgba(148,163,184,0.18)] backdrop-blur-xl transition-colors dark:border-white/10 dark:bg-slate-900/72 dark:shadow-[0_18px_44px_rgba(2,6,23,0.28)] md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto] md:items-end"
           onSubmit={handleSubmit}
         >
           <label className="flex flex-col gap-1.5">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
               Username
             </span>
             <input
               value={username}
               onChange={(event) => setUsername(event.target.value)}
               placeholder="octocat"
-              className="h-11 rounded-full border border-white/80 bg-white/90 px-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-400/60 focus:bg-white focus:ring-4 focus:ring-sky-400/15"
+              className="h-11 rounded-full border border-white/80 bg-white/90 px-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-400/60 focus:bg-white focus:ring-4 focus:ring-sky-400/15 dark:border-white/10 dark:bg-slate-950/70 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-sky-300/50 dark:focus:bg-slate-950 dark:focus:ring-sky-300/10"
             />
           </label>
 
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center justify-between gap-3">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
                 Token
               </span>
               <button
-                className="rounded-full border border-slate-200/80 bg-white/75 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600 transition hover:bg-white hover:text-slate-900"
+                className="rounded-full border border-slate-200/80 bg-white/75 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600 transition hover:bg-white hover:text-slate-900 dark:border-white/10 dark:bg-slate-800/70 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
                 type="button"
                 onClick={() => setTokenTutorialOpen(true)}
               >
@@ -426,14 +469,14 @@ function App() {
               onChange={(event) => setToken(event.target.value)}
               type="password"
               placeholder="optional"
-              className="h-11 rounded-full border border-white/80 bg-white/90 px-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-400/60 focus:bg-white focus:ring-4 focus:ring-sky-400/15"
+              className="h-11 rounded-full border border-white/80 bg-white/90 px-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-400/60 focus:bg-white focus:ring-4 focus:ring-sky-400/15 dark:border-white/10 dark:bg-slate-950/70 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-sky-300/50 dark:focus:bg-slate-950 dark:focus:ring-sky-300/10"
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="h-11 rounded-full bg-slate-900 px-5 text-xs font-semibold uppercase tracking-[0.14em] text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="h-11 rounded-full bg-slate-900 px-5 text-xs font-semibold uppercase tracking-[0.14em] text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
           >
             {loading ? "Analyzing" : "Analyze"}
           </button>
@@ -448,29 +491,30 @@ function App() {
                 silent: true,
               })
             }
-            className="h-11 rounded-full border border-slate-200/80 bg-white/85 px-5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="h-11 rounded-full border border-slate-200/80 bg-white/85 px-5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-slate-800/70 dark:text-slate-300 dark:hover:bg-slate-800"
           >
             {syncing ? "Refreshing" : "Refresh"}
           </button>
         </form>
 
-        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 sm:text-sm">
-          <span className="rounded-full border border-white/80 bg-white/75 px-3 py-1.5 shadow-sm backdrop-blur-xl">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-300 sm:text-sm">
+          <span className="rounded-full border border-white/80 bg-white/75 px-3 py-1.5 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/70">
             {visibleAchievements.length.toLocaleString()} total
           </span>
-          <span className="rounded-full border border-white/80 bg-white/75 px-3 py-1.5 shadow-sm backdrop-blur-xl">
+          <span className="rounded-full border border-white/80 bg-white/75 px-3 py-1.5 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/70">
             {unlockedCount.toLocaleString()} achieved
           </span>
-          <span className="rounded-full border border-white/80 bg-white/75 px-3 py-1.5 shadow-sm backdrop-blur-xl">
+          <span className="rounded-full border border-white/80 bg-white/75 px-3 py-1.5 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/70">
             {estimatedCount.toLocaleString()} estimated
           </span>
-          <span className="rounded-full border border-white/80 bg-white/75 px-3 py-1.5 shadow-sm backdrop-blur-xl">
+          <span className="rounded-full border border-white/80 bg-white/75 px-3 py-1.5 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/70">
             Synced: {lastSyncedText}
           </span>
-          <span className="rounded-full border border-white/80 bg-white/75 px-3 py-1.5 shadow-sm backdrop-blur-xl">
-            Auto: {autoSyncEnabled ? formatSyncInterval(syncIntervalSeconds) : "off"}
+          <span className="rounded-full border border-white/80 bg-white/75 px-3 py-1.5 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/70">
+            Auto:{" "}
+            {autoSyncEnabled ? formatSyncInterval(syncIntervalSeconds) : "off"}
           </span>
-          <label className="inline-flex items-center gap-2 rounded-full border border-white/80 bg-white/75 px-3 py-1.5 shadow-sm backdrop-blur-xl">
+          <label className="inline-flex items-center gap-2 rounded-full border border-white/80 bg-white/75 px-3 py-1.5 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/70">
             <input
               type="checkbox"
               checked={autoSyncEnabled}
@@ -480,15 +524,15 @@ function App() {
             Auto-sync
           </label>
           {dashboard ? (
-            <span className="rounded-full border border-white/80 bg-white/75 px-3 py-1.5 shadow-sm backdrop-blur-xl">
+            <span className="rounded-full border border-white/80 bg-white/75 px-3 py-1.5 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/70">
               {dashboard.cacheHit ? "Cache" : "Fresh"}
             </span>
           ) : null}
-          <span className="rounded-full border border-white/80 bg-white/75 px-3 py-1.5 shadow-sm backdrop-blur-xl">
+          <span className="rounded-full border border-white/80 bg-white/75 px-3 py-1.5 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/70">
             {sseConnected ? "Live sync" : "Polling"}
           </span>
           {syncing ? (
-            <span className="rounded-full border border-sky-300/70 bg-sky-100/80 px-3 py-1.5 text-sky-700">
+            <span className="rounded-full border border-sky-300/70 bg-sky-100/80 px-3 py-1.5 text-sky-700 dark:border-sky-400/20 dark:bg-sky-400/10 dark:text-sky-200">
               Syncing
             </span>
           ) : null}
@@ -500,7 +544,7 @@ function App() {
               {notifications.map((notification) => (
                 <div
                   key={notification.id}
-                  className="pointer-events-auto rounded-[1rem] border border-slate-200/80 bg-white/90 px-4 py-3 text-center text-xs font-medium text-slate-700 shadow-[0_16px_36px_rgba(71,85,105,0.16)] backdrop-blur-xl sm:text-sm"
+                  className="pointer-events-auto rounded-[1rem] border border-slate-200/80 bg-white/90 px-4 py-3 text-center text-xs font-medium text-slate-700 shadow-[0_16px_36px_rgba(71,85,105,0.16)] backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/90 dark:text-slate-200 sm:text-sm"
                 >
                   {notification.message}
                 </div>
@@ -516,10 +560,10 @@ function App() {
         <section>
           <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500 dark:text-slate-400">
                 Achievements
               </p>
-              <h2 className="mt-1 text-xl font-semibold uppercase tracking-[0.1em] text-slate-900 sm:text-2xl">
+              <h2 className="mt-1 text-xl font-semibold uppercase tracking-[0.1em] text-slate-900 dark:text-white sm:text-2xl">
                 Counter Tiles
               </h2>
             </div>
@@ -528,7 +572,7 @@ function App() {
           {loading ? (
             <Suspense
               fallback={
-                <div className="flex min-h-[360px] items-center justify-center rounded-[1.4rem] border border-white/75 bg-[rgba(248,251,255,0.76)] px-5 py-10 text-center text-sm font-semibold text-slate-700 shadow-[0_18px_42px_rgba(148,163,184,0.16)] backdrop-blur-xl">
+                <div className="flex min-h-[360px] items-center justify-center rounded-[1.4rem] border border-white/75 bg-[rgba(248,251,255,0.76)] px-5 py-10 text-center text-sm font-semibold text-slate-700 shadow-[0_18px_42px_rgba(148,163,184,0.16)] backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/75 dark:text-slate-200">
                   Analyzing profile
                 </div>
               }
@@ -548,11 +592,11 @@ function App() {
               ))}
             </div>
           ) : !errorMessage ? (
-            <div className="rounded-[1.4rem] border border-dashed border-slate-200/80 bg-white/65 px-5 py-8 text-center shadow-[0_18px_44px_rgba(148,163,184,0.18)] backdrop-blur-xl">
-              <h3 className="text-xl font-semibold text-slate-900">
+            <div className="rounded-[1.4rem] border border-dashed border-slate-200/80 bg-white/65 px-5 py-8 text-center shadow-[0_18px_44px_rgba(148,163,184,0.18)] backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/65">
+              <h3 className="text-xl font-semibold text-slate-900 dark:text-white">
                 Enter a GitHub username to start
               </h3>
-              <p className="mx-auto mt-2 max-w-xl text-xs leading-6 text-slate-600 sm:text-sm">
+              <p className="mx-auto mt-2 max-w-xl text-xs leading-6 text-slate-600 dark:text-slate-300 sm:text-sm">
                 Your achievement cards will appear here after analysis.
               </p>
             </div>

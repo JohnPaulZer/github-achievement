@@ -8,6 +8,10 @@
   color-scheme: light;
 }
 
+.dark {
+  color-scheme: dark;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -27,6 +31,11 @@ body {
     -apple-system,
     "Segoe UI",
     sans-serif;
+}
+
+.dark body {
+  background: #020617;
+  color: #e2e8f0;
 }
 
 #root {
@@ -52,6 +61,11 @@ pre {
 ::selection {
   background: rgba(14, 165, 233, 0.16);
   color: #1e293b;
+}
+
+.dark ::selection {
+  background: rgba(56, 189, 248, 0.28);
+  color: #f8fafc;
 }
 
 .achievement-highlight {
@@ -81,4 +95,9 @@ pre {
   100% {
     transform: translateY(0) scale(1);
   }
+}
+
+::view-transition-old(root), ::view-transition-new(root) {
+    animation: none;
+    mix-blend-mode: normal;
 }

@@ -165,9 +165,10 @@ export const ACHIEVEMENT_DEFINITIONS: Record<
   "public-sponsor": {
     id: "public-sponsor",
     name: "Public Sponsor",
-    description: "Sponsor an open source contributor through GitHub Sponsors.",
+    description:
+      "Sponsor an open source contributor or donate to JohnPaulZer through GitHub Sponsors.",
     instructions:
-      "Publicly sponsor an open source contributor using GitHub Sponsors.",
+      "Publicly sponsor an open source contributor or donate to JohnPaulZer using GitHub Sponsors.",
     unit: "sponsorships",
     tiers: [{ label: "Default", target: 1 }],
     estimatedByDefault: false,

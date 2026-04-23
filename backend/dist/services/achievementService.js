@@ -539,7 +539,10 @@ function buildRateLimitedFallback(cachedPayload, error) {
     return {
         ...cachedPayload,
         cacheHit: true,
-        apiLimitations: dedupeStrings([retryMessage, ...cachedPayload.apiLimitations]),
+        apiLimitations: dedupeStrings([
+            retryMessage,
+            ...cachedPayload.apiLimitations,
+        ]),
     };
 }
 function invalidateUserAchievementCache(username) {
@@ -551,7 +554,9 @@ async function analyzeAchievementProgress(params) {
         throw new errors_1.AppError(400, "INVALID_USERNAME", "Username is required.");
     }
     const requestToken = params.token?.trim() || undefined;
-    const serverToken = requestToken ? undefined : SERVER_GITHUB_TOKEN || undefined;
+    const serverToken = requestToken
+        ? undefined
+        : SERVER_GITHUB_TOKEN || undefined;
     const token = requestToken ?? serverToken;
     const cacheScope = requestToken
         ? `auth:${hashTokenForCache(requestToken)}`
@@ -763,6 +768,7 @@ async function analyzeAchievementProgress(params) {
                     ...officialProfileDetectedStats(publicSponsorBadge),
                 }, false, sponsorLimitation, sponsorVerificationStatus),
             ];
+            // API limitations and estimation notes are included in the response for transparency, but the raw detected values and official profile badge floors are also included in the detectedStats of each achievement for clients that want to build their own UI or messaging around the limitations.
             const now = new Date();
             const payload = {
                 profile: {

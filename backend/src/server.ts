@@ -1,22 +1,72 @@
 import "dotenv/config";
 import cors from "cors";
 import express, { NextFunction, Request, Response } from "express";
-import { isAppError } from "./lib/errors";
+import rateLimit from "express-rate-limit";
+import helmet from "helmet";
+import { AppError, isAppError } from "./lib/errors";
 import achievementRoutes from "./routes/achievementRoutes";
 import syncRoutes from "./routes/syncRoutes";
 import webhookRoutes from "./routes/webhookRoutes";
 
 const app = express();
 const port = Number(process.env.PORT) || 5050;
-const corsOrigin = process.env.CORS_ORIGIN ?? "*";
+const isProduction = process.env.NODE_ENV === "production";
+const corsOrigin = process.env.CORS_ORIGIN?.trim();
+const allowedCorsOrigins =
+  corsOrigin && corsOrigin !== "*"
+    ? corsOrigin
+        .split(",")
+        .map((origin) => origin.trim())
+        .filter(Boolean)
+    : [];
+const rateLimitWindowMs = 5 * 60 * 1000;
+const rateLimitMaxRequests = Number(process.env.API_RATE_LIMIT_MAX ?? 100);
+
+if (isProduction && allowedCorsOrigins.length === 0) {
+  throw new Error(
+    "CORS_ORIGIN must be set to your frontend origin in production.",
+  );
+}
+
+function sanitizeErrorDetails(error: AppError): unknown {
+  if (!isProduction) {
+    return error.details ?? null;
+  }
+
+  if (
+    error.code === "GITHUB_RATE_LIMIT" &&
+    error.details &&
+    typeof error.details === "object"
+  ) {
+    const resetAt = (error.details as { resetAt?: unknown }).resetAt;
+    return typeof resetAt === "string" ? { resetAt } : null;
+  }
+
+  return null;
+}
+
+app.disable("x-powered-by");
+app.use(helmet());
 
 app.use(
   cors({
-    origin:
-      corsOrigin === "*"
-        ? true
-        : corsOrigin.split(",").map((origin) => origin.trim()),
+    origin: allowedCorsOrigins.length > 0 ? allowedCorsOrigins : true,
     credentials: false,
+  }),
+);
+
+app.use(
+  "/api",
+  rateLimit({
+    windowMs: rateLimitWindowMs,
+    limit: rateLimitMaxRequests,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+      ok: false,
+      code: "RATE_LIMITED",
+      message: "Too many requests. Please wait and try again.",
+    },
   }),
 );
 
@@ -47,7 +97,7 @@ app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
       ok: false,
       code: error.code,
       message: error.message,
-      details: error.details ?? null,
+      details: sanitizeErrorDetails(error),
     });
     return;
   }

@@ -1,45 +1,10 @@
-# GitHub Achievement Progress Tracker
+# GitHub Achievement Counter
 
-Live, GitHub-inspired tracker for estimated progress on selected GitHub achievements.
+## Purpose
 
-## Stack
+This web app analyzes a GitHub user's achievement progress and displays it as a clean live counter dashboard.
 
-- Frontend: React + TypeScript + Vite + Tailwind CSS
-- Backend: Node.js + Express + TypeScript
-- Data source: GitHub REST API + GitHub GraphQL API
-- Sync: Manual refresh + auto-refresh polling + focus/revisit refresh + webhook-triggered refresh events (SSE)
-
-## Folder Structure
-
-```text
-.
-|- frontend/
-|  |- src/
-|  |  |- api/
-|  |  |- components/
-|  |  |- utils/
-|  |  |- App.tsx
-|  |  |- index.css
-|  |  |- main.tsx
-|  |  |- types.ts
-|  |- .env.example
-|  |- package.json
-|  |- tailwind.config.js
-|
-|- backend/
-|  |- src/
-|  |  |- config/
-|  |  |- lib/
-|  |  |- routes/
-|  |  |- services/
-|  |  |- utils/
-|  |  |- server.ts
-|  |  |- types.ts
-|  |- .env.example
-|  |- package.json
-```
-
-## Achievements Covered
+It is made for tracking GitHub profile achievements such as:
 
 - Starstruck
 - Quickdraw
@@ -49,115 +14,249 @@ Live, GitHub-inspired tracker for estimated progress on selected GitHub achievem
 - YOLO
 - Public Sponsor
 
-The app labels progress as estimated when GitHub does not expose exact official counters.
+The app shows the current counter value, current tier, next tier target, progress bar, achievement status, and detailed detected stats for each badge. It also shows a compact achievement summary row with tier multipliers such as `x2`, `x3`, and `x4`.
 
-## Security Note
+Public GitHub data works without a token. A GitHub token improves accuracy, raises API limits, and can include private repositories or private pull requests when the token belongs to the same GitHub account being analyzed.
 
-- GitHub token is optional.
-- Token is sent per request for analysis and never saved in a database.
-- Backend uses token only in memory for the current request.
-- You can also set `GITHUB_TOKEN` in `backend/.env` so the backend uses a server-side token for higher GitHub API limits.
+## Live Link
 
-## Local Setup
+Local frontend:
 
-### 1. Backend
+```text
+http://localhost:5173
+```
+
+Local backend:
+
+```text
+http://localhost:5050
+```
+
+Add your deployed frontend URL here when the app is published.
+
+## What The App Does
+
+The app checks GitHub activity and estimates achievement progress by combining:
+
+- GitHub REST API data
+- GitHub GraphQL API data
+- Public GitHub profile achievement badges
+- Public sponsorship/profile information
+- Recent events, pull requests, reviews, commits, discussions, and repositories
+
+The backend tries to make counters more accurate by using official profile badge data as a minimum floor when GitHub does not expose the exact badge counter directly.
+
+## Achievements Tracked
+
+### Starstruck
+
+Tracks repositories created by the user and uses the highest star count found.
+
+### Quickdraw
+
+Tracks issues or pull requests closed within 5 minutes of opening.
+
+### Pair Extraordinaire
+
+Tracks co-authored commits on merged pull requests.
+
+### Pull Shark
+
+Tracks pull requests opened by the user that have been merged.
+
+### Galaxy Brain
+
+Tracks accepted GitHub Discussion answers where available.
+
+### YOLO
+
+Tracks pull requests merged without review.
+
+### Public Sponsor
+
+Tracks whether the user publicly sponsors someone through GitHub Sponsors.
+
+## Main Features
+
+- GitHub username analysis
+- Optional GitHub token support
+- Token tutorial modal
+- Error modal for invalid usernames, invalid tokens, rate limits, and API errors
+- Loading animation while analyzing
+- Clean achievement counter cards
+- Show Details modal for each achievement
+- Achievement summary row with badge multipliers
+- Animated notifications when achievements change
+- Auto-sync and manual refresh
+- Server-sent events for webhook-triggered refresh
+- GitHub Sponsors floating button for JohnPaulZer
+- Production security headers with Helmet
+- API rate limit of 100 requests per 5 minutes
+
+## Process
+
+### 1. Copy environment files
+
+From the project root:
+
+```bash
+copy backend\.env.example backend\.env
+copy frontend\.env.example frontend\.env
+```
+
+On macOS or Linux:
+
+```bash
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
+```
+
+### 2. Install backend dependencies
 
 ```bash
 cd backend
-copy .env.example .env
 npm install
-npm run dev
 ```
 
-For local development, add a GitHub personal access token to `backend/.env`:
+### 3. Install frontend dependencies
 
-```env
-GITHUB_TOKEN=ghp_your_token_here
-```
-
-This does not remove GitHub's rate limit, but it raises the limit significantly compared with anonymous requests and prevents the frequent `429` you were seeing from `localhost:5050`.
-
-### 2. Frontend
+Open another terminal:
 
 ```bash
 cd frontend
-copy .env.example .env
 npm install
-npm run dev
 ```
 
-Frontend default URL: http://localhost:5173
-Backend default URL: http://localhost:5050
-
-## Build
+### 4. Start the backend
 
 ```bash
 cd backend
-npm run build
-
-cd ../frontend
-npm run build
+npm run dev
 ```
 
-## API Endpoints
+The backend runs at:
 
-- GET /api/health
-- POST /api/achievements/analyze
-- GET /api/achievements/analyze/:username
-- GET /api/sync/events/:username (SSE stream)
-- POST /api/webhooks/github
-
-### Analyze Request Body
-
-```json
-{
-  "username": "octocat",
-  "token": "optional-token",
-  "forceRefresh": true
-}
+```text
+http://localhost:5050
 ```
 
-## Auto Update Strategy
+### 5. Start the frontend
 
-The app updates progress via a hybrid sync model:
+```bash
+cd frontend
+npm run dev
+```
 
-- On-demand analysis when user clicks Analyze Progress
-- Manual Refresh Progress button
-- Auto-refresh polling while dashboard is open
-- Automatic refresh when the dashboard regains focus or is reopened on the same device
-- Webhook event invalidates cache and emits SSE refresh-needed event
-- Frontend listens to SSE and refreshes without full reload
+The frontend runs at:
 
-## GitHub Webhook Setup (Optional)
+```text
+http://localhost:5173
+```
 
-1. Add a webhook in GitHub repository settings.
-2. Payload URL: http://your-backend-host/api/webhooks/github
-3. Content type: application/json
-4. Secret must match backend .env GITHUB_WEBHOOK_SECRET
-5. Select events relevant to stars, pull requests, issues, discussions, and sponsorship where available.
+### 6. Use the app
 
-## Environment Variables
+1. Open `http://localhost:5173`.
+2. Enter a GitHub username.
+3. Optional: paste a GitHub token for better accuracy.
+4. Click `Analyze`.
+5. Review the achievement cards.
+6. Click `Show Details` on any card to see detected stats and tier targets.
+7. Use `Refresh` to force a new sync.
+8. Keep `Auto-sync` enabled if you want the app to refresh automatically.
 
-### backend/.env
+## GitHub Token
 
-- PORT
-- CORS_ORIGIN
-- PUBLIC_CACHE_TTL_SECONDS
-- AUTH_CACHE_TTL_SECONDS
-- AUTO_SYNC_INTERVAL_SECONDS
-- GITHUB_TOKEN
-- GITHUB_WEBHOOK_SECRET
+A token is optional, but recommended.
 
-### frontend/.env
+Without a token, the app can analyze public GitHub data only. With a token, the app gets higher GitHub API limits and can include private or token-accessible data when the token belongs to the analyzed account.
 
-- VITE_API_BASE_URL
+### Fine-Grained Token Recommended
 
-The frontend falls back to `http://<current-host>:5050` when `VITE_API_BASE_URL` is not provided.
+Open:
 
-## Notes on API Limitations
+```text
+https://github.com/settings/personal-access-tokens/new
+```
 
-- Some achievement calculations are best-effort and approximate.
-- Quickdraw depends on recent public events and can miss older/private activity.
-- Pair Extraordinaire and YOLO inspect a limited set of recent merged PRs per sync.
-- Galaxy Brain exact accepted-answer counts are not fully exposed by official APIs.
-- Public Sponsor verification may be unavailable if token is missing or lacks scope.
+Create a fine-grained token with read-only access.
+
+Recommended permissions:
+
+- Metadata: read
+- Contents: read
+- Pull requests: read
+- Issues: read
+- Discussions: read
+- Events: read, if shown by GitHub
+
+Do not add write, admin, workflow, secret, or organization permissions for this app.
+
+### Classic Token Fallback
+
+Open:
+
+```text
+https://github.com/settings/tokens/new
+```
+
+For public data only, a classic token with no scopes can raise API limits.
+
+For private repository data, classic tokens need the broad `repo` scope. Use that only if you understand and accept the wider access.
+
+### How To Use The Token
+
+1. Generate the token in GitHub.
+2. Copy it immediately.
+3. Paste it into the app's optional `Token` field.
+4. Enter the matching GitHub username.
+5. Click `Analyze`.
+
+The token is sent to the backend for GitHub API requests. The frontend keeps it only in current React state and does not save it to local storage.
+
+You can also set a backend token in `backend/.env`:
+
+```env
+GITHUB_TOKEN=your_token_here
+```
+
+This lets the backend reuse a server-side token for higher API limits. For private activity, use a token from the same account being analyzed.
+
+## Security
+
+Current security features:
+
+- `.env` files are ignored by Git.
+- GitHub token is not saved in browser local storage.
+- Backend does not return the token to the frontend.
+- Token-based cache keys use SHA-256 token hashes, not raw token values.
+- Express JSON body limit is `1mb`.
+- Helmet adds production-friendly security headers.
+- API rate limit is `100` requests per `5` minutes by default.
+- Production requires a specific `CORS_ORIGIN`.
+- Webhook signature verification is supported through `GITHUB_WEBHOOK_SECRET`.
+- Production error responses hide raw upstream details.
+
+## Notes
+
+- GitHub does not expose every official achievement counter directly.
+- Some values are estimates.
+- Public profile badges are used as a lower-bound source when available.
+- Quickdraw depends on recent event history and may miss older activity.
+- Private repositories require a token with access to those repositories.
+- Organization repositories may require SSO or organization approval.
+- Public Sponsor checks can depend on public profile visibility and GraphQL availability.
+- GitHub API rate limits still apply even with a token.
+
+## Screenshots
+
+Add screenshots of the app here after deployment or final UI capture:
+
+```text
+docs/screenshots/dashboard.png
+docs/screenshots/details-modal.png
+docs/screenshots/token-tutorial.png
+```
+
+## Summary
+
+GitHub Achievement Counter is a full-stack React and Express app for analyzing GitHub achievement progress. It helps users see which GitHub achievements are unlocked, which tier they are on, how close they are to the next tier, and what GitHub activity was detected to calculate each badge.

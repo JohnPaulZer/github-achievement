@@ -8,6 +8,7 @@ import {
 } from "./api/achievementApi";
 import AchievementCard from "./components/AchievementCard";
 import AchievementSummary from "./components/AchievementSummary";
+import ErrorModal from "./components/ErrorModal";
 import SponsorFloatingAction from "./components/SponsorFloatingAction";
 import TokenTutorialModal from "./components/TokenTutorialModal";
 import type { AnalyzeResponse, UiNotification } from "./types";
@@ -508,12 +509,6 @@ function App() {
           </div>
         ) : null}
 
-        {errorMessage ? (
-          <div className="rounded-[1rem] border border-slate-300/80 bg-white/90 px-4 py-3 text-xs text-slate-800 shadow-[0_12px_24px_rgba(148,163,184,0.08)] sm:text-sm">
-            {errorMessage}
-          </div>
-        ) : null}
-
         {!loading && dashboard ? (
           <AchievementSummary achievements={visibleAchievements} />
         ) : null}
@@ -568,6 +563,10 @@ function App() {
       <TokenTutorialModal
         open={tokenTutorialOpen}
         onClose={() => setTokenTutorialOpen(false)}
+      />
+      <ErrorModal
+        message={errorMessage}
+        onClose={() => setErrorMessage(null)}
       />
       <SponsorFloatingAction />
     </main>

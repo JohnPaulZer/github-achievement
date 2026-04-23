@@ -82,30 +82,30 @@ function formatSyncInterval(seconds: number): string {
 function mapErrorToMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.code === "USERNAME_NOT_FOUND") {
-      return "Invalid username. Please enter a valid GitHub username.";
+      return "Invalid username.";
     }
 
     if (error.code === "GITHUB_RATE_LIMIT") {
       const resetAt = readResetAt(error.details);
       if (resetAt) {
-        return `Rate limit reached. Add a GitHub token in the app or set backend GITHUB_TOKEN, then try again after ${new Date(resetAt).toLocaleTimeString()}.`;
+        return `Rate limit reached. Requests are limited until ${new Date(resetAt).toLocaleTimeString()}.`;
       }
 
-      return "Rate limit reached. Add a GitHub token in the app or set backend GITHUB_TOKEN, then try again after the reset time.";
+      return "Rate limit reached.";
     }
 
     if (error.code === "GITHUB_TOKEN_INVALID") {
-      return "Token is invalid or expired. Update the token and retry.";
+      return "Token is invalid or expired.";
     }
 
     if (error.code === "GITHUB_FORBIDDEN") {
-      return "Token permissions are insufficient for one or more checks.";
+      return "Access was denied by GitHub.";
     }
 
     return error.message;
   }
 
-  return "Unable to analyze progress right now. Please try again.";
+  return "Unable to analyze progress right now.";
 }
 
 function App() {

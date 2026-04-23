@@ -24,6 +24,7 @@ const SERVER_GITHUB_TOKEN = process.env.GITHUB_TOKEN?.trim() ||
     process.env.GITHUB_PAT?.trim() ||
     "";
 const GITHUB_PROFILE_BASE_URL = "https://github.com";
+const GALAXY_BRAIN_SCOPE_NOTE = "Counts accepted answers in repository GitHub Discussions. Normal replies do not count; private or organization-owned repositories are included only when visible to the token.";
 const PROFILE_BADGE_TIER_LABELS = {
     x2: "Bronze",
     x3: "Silver",
@@ -423,13 +424,13 @@ async function getGalaxyBrainEstimate(username, graphql) {
             return {
                 count: 0,
                 available: false,
-                limitation: "Galaxy Brain data is limited by GitHub GraphQL API availability.",
+                limitation: GALAXY_BRAIN_SCOPE_NOTE,
             };
         }
         return {
             count: 0,
             available: false,
-            limitation: "Galaxy Brain data is limited by GitHub GraphQL API availability.",
+            limitation: GALAXY_BRAIN_SCOPE_NOTE,
         };
     }
 }
@@ -745,14 +746,16 @@ async function analyzeAchievementProgress(params) {
                 buildAchievement("galaxy-brain", galaxyBrainValue, {
                     acceptedDiscussionAnswers: galaxyBrainValue,
                     graphqlAcceptedAnswers: galaxyEstimate.count,
+                    countedSignal: "accepted discussion answers only",
+                    discussionSource: "GitHub repositoryDiscussionComments with onlyAnswers enabled",
                     discussionVisibilityChecked: useAuthenticatedSelfData
-                        ? "token-accessible public and private discussions"
-                        : "public discussions only",
+                        ? "repository discussions visible to the current token"
+                        : "public repository discussions only",
                     ...officialProfileDetectedStats(galaxyBrainProfileBadge),
                 }, true, joinNotes(galaxyEstimate.limitation ??
                     (useAuthenticatedSelfData
-                        ? "Estimated from discussion search, including private results visible to your token, because official counters are not fully exposed."
-                        : "Estimated from answered discussion search because official counters are not fully exposed."), officialProfileFloorNote("galaxy-brain", galaxyBrainProfileBadge, galaxyEstimate.count))),
+                        ? GALAXY_BRAIN_SCOPE_NOTE
+                        : "Counts accepted answers in public repository GitHub Discussions. Normal replies do not count."), officialProfileFloorNote("galaxy-brain", galaxyBrainProfileBadge, galaxyEstimate.count))),
                 buildAchievement("yolo", yoloValue, {
                     unreviewedMergedPrs: yoloValue,
                     apiUnreviewedMergedPrs: pairAndYoloInspection.yoloCount,

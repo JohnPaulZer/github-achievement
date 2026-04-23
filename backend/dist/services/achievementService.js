@@ -23,6 +23,12 @@ const SERVER_GITHUB_TOKEN = process.env.GITHUB_TOKEN?.trim() ||
     process.env.GITHUB_ACCESS_TOKEN?.trim() ||
     process.env.GITHUB_PAT?.trim() ||
     "";
+const GITHUB_PROFILE_BASE_URL = "https://github.com";
+const PROFILE_BADGE_TIER_LABELS = {
+    x2: "Bronze",
+    x3: "Silver",
+    x4: "Gold",
+};
 function cacheTtlMs(hasToken) {
     const seconds = hasToken ? AUTH_CACHE_TTL_SECONDS : PUBLIC_CACHE_TTL_SECONDS;
     return Math.max(0, seconds) * 1000;
@@ -58,6 +64,136 @@ function parseRepositoryFromApiUrl(repositoryUrl) {
 function buildSearchQuery(query) {
     return encodeURIComponent(query);
 }
+function isAchievementId(value) {
+    return Object.prototype.hasOwnProperty.call(achievements_1.ACHIEVEMENT_DEFINITIONS, value);
+}
+function getTierTarget(id, label) {
+    const definition = achievements_1.ACHIEVEMENT_DEFINITIONS[id];
+    return (definition.tiers.find((tier) => tier.label === label)?.target ??
+        definition.tiers[0]?.target ??
+        1);
+}
+function getProfileBadgeTier(block) {
+    const classMatch = block.match(/achievement-tier-label--(bronze|silver|gold)/i);
+    const classTier = classMatch?.[1]?.toLowerCase();
+    if (classTier === "bronze") {
+        return { tierLabel: "Bronze", displayLabel: "x2" };
+    }
+    if (classTier === "silver") {
+        return { tierLabel: "Silver", displayLabel: "x3" };
+    }
+    if (classTier === "gold") {
+        return { tierLabel: "Gold", displayLabel: "x4" };
+    }
+    const multiplierMatch = block.match(/>\s*(x[234])\s*</i);
+    const multiplier = multiplierMatch?.[1]?.toLowerCase();
+    const multiplierTier = multiplier
+        ? PROFILE_BADGE_TIER_LABELS[multiplier]
+        : undefined;
+    if (multiplierTier && multiplier) {
+        return { tierLabel: multiplierTier, displayLabel: multiplier };
+    }
+    return { tierLabel: "Default", displayLabel: "Default" };
+}
+function parseIntegerText(value) {
+    const parsed = Number(value.replace(/,/g, "").trim());
+    return Number.isFinite(parsed) ? parsed : null;
+}
+function parseOfficialAchievementBadges(html) {
+    const badges = {};
+    const achievementLinkRegex = /<a\b[^>]*href="\/[^"]+\?achievement=([a-z-]+)(?:&amp;|&)tab=achievements"[^>]*>([\s\S]*?)<\/a>/gi;
+    for (const match of html.matchAll(achievementLinkRegex)) {
+        const id = match[1];
+        const block = match[2];
+        if (!id || !block || !isAchievementId(id)) {
+            continue;
+        }
+        const { tierLabel, displayLabel } = getProfileBadgeTier(block);
+        const minimumValue = getTierTarget(id, tierLabel);
+        const existing = badges[id];
+        if (!existing || minimumValue > existing.minimumValue) {
+            badges[id] = {
+                id,
+                tierLabel,
+                minimumValue,
+                displayLabel,
+            };
+        }
+    }
+    return badges;
+}
+function parsePublicSponsoringCount(html) {
+    const sponsoringTabMatch = html.match(/data-tab-item="sponsoring"[\s\S]*?<span[^>]*>\s*Sponsoring\s*<\/span>\s*<span[^>]*class="Counter"[^>]*>([\s\S]*?)<\/span>/i);
+    if (!sponsoringTabMatch?.[1]) {
+        return null;
+    }
+    const titleMatch = sponsoringTabMatch[0].match(/title="([^"]+)"/i);
+    const titleCount = titleMatch?.[1] ? parseIntegerText(titleMatch[1]) : null;
+    if (titleCount !== null) {
+        return titleCount;
+    }
+    return parseIntegerText(sponsoringTabMatch[1].replace(/<[^>]+>/g, "").trim());
+}
+async function fetchPublicProfileAchievementSnapshot(username) {
+    try {
+        const response = await fetch(`${GITHUB_PROFILE_BASE_URL}/${encodeURIComponent(username)}`, {
+            headers: {
+                Accept: "text/html",
+                "User-Agent": "github-achievement-progress-tracker",
+            },
+        });
+        if (!response.ok) {
+            return {
+                available: false,
+                badges: {},
+                publicSponsoringCount: null,
+                limitation: `Could not read public GitHub profile achievements (HTTP ${response.status}).`,
+            };
+        }
+        const html = await response.text();
+        return {
+            available: true,
+            badges: parseOfficialAchievementBadges(html),
+            publicSponsoringCount: parsePublicSponsoringCount(html),
+        };
+    }
+    catch {
+        return {
+            available: false,
+            badges: {},
+            publicSponsoringCount: null,
+            limitation: "Could not read public GitHub profile achievements.",
+        };
+    }
+}
+function getOfficialProfileBadge(snapshot, id) {
+    return snapshot.badges[id] ?? null;
+}
+function valueWithOfficialProfileFloor(value, id, snapshot) {
+    const officialBadge = getOfficialProfileBadge(snapshot, id);
+    return Math.max(value, officialBadge?.minimumValue ?? 0);
+}
+function officialProfileDetectedStats(officialBadge) {
+    if (!officialBadge) {
+        return {};
+    }
+    return {
+        officialProfileBadgeTier: officialBadge.tierLabel,
+        officialProfileBadgeLabel: officialBadge.displayLabel,
+        officialProfileMinimumValue: officialBadge.minimumValue,
+    };
+}
+function officialProfileFloorNote(id, officialBadge, rawValue) {
+    if (!officialBadge || rawValue >= officialBadge.minimumValue) {
+        return undefined;
+    }
+    const definition = achievements_1.ACHIEVEMENT_DEFINITIONS[id];
+    return `Official GitHub profile badge confirms at least ${officialBadge.minimumValue} ${definition.unit} (${officialBadge.tierLabel}).`;
+}
+function joinNotes(...notes) {
+    const filtered = notes.filter((note) => Boolean(note));
+    return filtered.length > 0 ? filtered.join(" ") : undefined;
+}
 async function fetchAllOwnedRepos(username, rest, useAuthenticatedSelfData) {
     const repos = [];
     const lowerUsername = username.toLowerCase();
@@ -65,7 +201,9 @@ async function fetchAllOwnedRepos(username, rest, useAuthenticatedSelfData) {
         const response = await rest(useAuthenticatedSelfData
             ? `/user/repos?affiliation=owner&visibility=all&per_page=100&page=${page}`
             : `/users/${encodeURIComponent(username)}/repos?type=owner&per_page=100&page=${page}`);
-        repos.push(...response.filter((repo) => repo.owner.login.toLowerCase() === lowerUsername));
+        repos.push(...response.filter(
+        // Exclude forks — Starstruck only counts repos the user originally created
+        (repo) => repo.owner.login.toLowerCase() === lowerUsername && !repo.fork));
         if (response.length < 100) {
             break;
         }
@@ -113,6 +251,10 @@ function countQuickdrawMatches(username, events) {
     const seen = new Set();
     const samples = [];
     for (const event of events) {
+        // Only IssuesEvent and PullRequestEvent can carry a "closed" action for Quickdraw
+        if (event.type !== "IssuesEvent" && event.type !== "PullRequestEvent") {
+            continue;
+        }
         const action = event.payload.action;
         const isClosedAction = action === "closed";
         if (!isClosedAction) {
@@ -207,43 +349,106 @@ async function inspectPairAndYoloSignals(mergedPrItems, rest) {
         notes,
     };
 }
-async function getGalaxyBrainEstimate(username, rest) {
-    const query = buildSearchQuery(`is:discussion is:answered commenter:${username}`);
+// Fetch up to 5 pages × 50 PRs = 250 merged PRs via GraphQL.
+// Each page requests 30 commits per PR to stay well within GitHub's
+// GraphQL complexity limit (50 × 30 = 1 500 per query, max is 5 000).
+const PAIR_GRAPHQL_MAX_PAGES = 5;
+async function countPairExtraordinaireViaGraphQL(username, graphql) {
+    const query = `
+    query PairExtraordinaire($username: String!, $cursor: String) {
+      user(login: $username) {
+        pullRequests(states: MERGED, first: 50, after: $cursor) {
+          pageInfo { hasNextPage endCursor }
+          nodes {
+            commits(first: 30) {
+              nodes {
+                commit { message }
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+    let count = 0;
+    let inspected = 0;
+    let cursor = null;
+    for (let page = 0; page < PAIR_GRAPHQL_MAX_PAGES; page += 1) {
+        try {
+            const result = await graphql(query, {
+                username,
+                cursor,
+            });
+            const prs = result.user?.pullRequests;
+            if (!prs)
+                break;
+            for (const pr of prs.nodes) {
+                inspected += 1;
+                const hasCoAuthor = pr.commits.nodes.some((c) => containsCoAuthor(c.commit.message));
+                if (hasCoAuthor) {
+                    count += 1;
+                }
+            }
+            if (!prs.pageInfo.hasNextPage)
+                break;
+            cursor = prs.pageInfo.endCursor;
+        }
+        catch {
+            // GraphQL unavailable (no token, rate-limited, etc.) — return what we have
+            break;
+        }
+    }
+    return { count, inspected };
+}
+async function getGalaxyBrainEstimate(username, graphql) {
+    // GitHub Discussions are NOT searchable via REST /search/issues.
+    // The correct approach is GraphQL: fetch discussion comments by this user
+    // that were marked as the accepted answer (onlyAnswers: true).
+    const query = `
+    query GalaxyBrainCount($username: String!) {
+      user(login: $username) {
+        repositoryDiscussionComments(onlyAnswers: true) {
+          totalCount
+        }
+      }
+    }
+  `;
     try {
-        const response = await rest(`/search/issues?q=${query}&per_page=1&page=1`);
-        return {
-            count: response.total_count,
-            available: true,
-        };
+        const result = await graphql(query, { username });
+        const count = result.user?.repositoryDiscussionComments.totalCount ?? 0;
+        return { count, available: true };
     }
     catch (error) {
         if (error instanceof errors_1.AppError) {
             return {
                 count: 0,
                 available: false,
-                limitation: "Official progress data is limited by GitHub API availability.",
+                limitation: "Galaxy Brain data is limited by GitHub GraphQL API availability.",
             };
         }
         return {
             count: 0,
             available: false,
-            limitation: "Official progress data is limited by GitHub API availability.",
+            limitation: "Galaxy Brain data is limited by GitHub GraphQL API availability.",
         };
     }
 }
-async function getPublicSponsorStatus(username, token) {
+async function getPublicSponsorStatus(username, client, token) {
+    // GraphQL is required to query sponsorship data, so a token (any valid token,
+    // not necessarily the analyzed user's) must be present.
     if (!token) {
         return {
             verificationStatus: "unavailable",
             count: 0,
-            limitation: "Provide a token to verify Public Sponsor status. Token is used only for this request.",
+            limitation: "Provide a token to verify Public Sponsor status. Any valid GitHub token is accepted.",
         };
     }
-    const client = (0, githubClient_1.createGitHubClient)(token);
+    // Query the target user's public outgoing sponsorships directly.
+    // Using user(login: $username) rather than viewer means any token works —
+    // the old viewer-based check required a token owned by the analyzed account.
     const query = `
-    query SponsorStatus {
-      viewer {
-        login
+    query PublicSponsorCheck($username: String!) {
+      user(login: $username) {
         sponsorshipsAsSponsor(first: 1, includePrivate: false) {
           totalCount
         }
@@ -251,16 +456,17 @@ async function getPublicSponsorStatus(username, token) {
     }
   `;
     try {
-        const result = await client.graphql(query);
-        const viewer = result.viewer;
-        if (viewer.login.toLowerCase() !== username.toLowerCase()) {
+        const result = await client.graphql(query, {
+            username,
+        });
+        if (!result.user) {
             return {
                 verificationStatus: "unavailable",
                 count: 0,
-                limitation: "Token belongs to a different account. Use a token owned by the analyzed username.",
+                limitation: "User not found when verifying Public Sponsor status.",
             };
         }
-        const count = viewer.sponsorshipsAsSponsor.totalCount;
+        const count = result.user.sponsorshipsAsSponsor.totalCount;
         return {
             verificationStatus: count > 0 ? "verified" : "not-verified",
             count,
@@ -391,22 +597,70 @@ async function analyzeAchievementProgress(params) {
                 }
                 throw error;
             }
-            const [repos, events, mergedPrSearch, galaxyEstimate, sponsorResult] = await Promise.all([
+            const [repos, events, mergedPrSearch, galaxyEstimate, sponsorResult, pairGraphqlResult, profileAchievementSnapshot,] = await Promise.all([
                 fetchAllOwnedRepos(username, client.rest, useAuthenticatedSelfData),
                 fetchRecentEvents(username, client.rest, useAuthenticatedSelfData),
                 fetchMergedPrSearch(username, client.rest, pairAndYoloInspectionLimit),
-                getGalaxyBrainEstimate(username, client.rest),
-                getPublicSponsorStatus(username, requestToken),
+                // Galaxy Brain: must use GraphQL — REST /search/issues does not index Discussions
+                getGalaxyBrainEstimate(username, client.graphql),
+                // Public Sponsor: pass the shared client so any token (server or user) is accepted
+                getPublicSponsorStatus(username, client, token),
+                // Pair Extraordinaire: GraphQL reaches private PRs the REST search misses
+                countPairExtraordinaireViaGraphQL(username, client.graphql),
+                // Public profile badges are the closest available signal to GitHub's official achievement state.
+                fetchPublicProfileAchievementSnapshot(username),
             ]);
             const pairAndYoloInspection = await inspectPairAndYoloSignals(mergedPrSearch.items, client.rest);
+            // Take whichever scan found more co-authored PRs.
+            // REST search covers recent public PRs with full review context (needed for YOLO).
+            // GraphQL covers all merged PRs including private org repos (critical for Pair Extraordinaire).
+            const rawPairCount = Math.max(pairAndYoloInspection.pairCount, pairGraphqlResult.count);
+            const pairCount = valueWithOfficialProfileFloor(rawPairCount, "pair-extraordinaire", profileAchievementSnapshot);
+            const pairInspectedTotal = pairAndYoloInspection.inspectedPrs + pairGraphqlResult.inspected;
             const highestRepo = repos.reduce((best, current) => {
                 if (!best || current.stargazers_count > best.stargazers_count) {
                     return current;
                 }
                 return best;
             }, null);
-            const starstruckValue = highestRepo?.stargazers_count ?? 0;
+            const rawStarstruckValue = highestRepo?.stargazers_count ?? 0;
+            const starstruckProfileBadge = getOfficialProfileBadge(profileAchievementSnapshot, "starstruck");
+            const starstruckValue = valueWithOfficialProfileFloor(rawStarstruckValue, "starstruck", profileAchievementSnapshot);
             const quickdrawStats = countQuickdrawMatches(username, events);
+            const quickdrawProfileBadge = getOfficialProfileBadge(profileAchievementSnapshot, "quickdraw");
+            const quickdrawValue = valueWithOfficialProfileFloor(quickdrawStats.count, "quickdraw", profileAchievementSnapshot);
+            const pullSharkProfileBadge = getOfficialProfileBadge(profileAchievementSnapshot, "pull-shark");
+            const pullSharkValue = valueWithOfficialProfileFloor(mergedPrSearch.totalCount, "pull-shark", profileAchievementSnapshot);
+            const galaxyBrainProfileBadge = getOfficialProfileBadge(profileAchievementSnapshot, "galaxy-brain");
+            const galaxyBrainValue = valueWithOfficialProfileFloor(galaxyEstimate.count, "galaxy-brain", profileAchievementSnapshot);
+            const yoloProfileBadge = getOfficialProfileBadge(profileAchievementSnapshot, "yolo");
+            const yoloValue = valueWithOfficialProfileFloor(pairAndYoloInspection.yoloCount, "yolo", profileAchievementSnapshot);
+            const pairProfileBadge = getOfficialProfileBadge(profileAchievementSnapshot, "pair-extraordinaire");
+            const publicSponsorBadge = getOfficialProfileBadge(profileAchievementSnapshot, "public-sponsor");
+            const publicProfileSponsoringCount = profileAchievementSnapshot.publicSponsoringCount ?? 0;
+            const rawSponsorCount = Math.max(sponsorResult.count, publicProfileSponsoringCount);
+            const sponsorValue = valueWithOfficialProfileFloor(rawSponsorCount, "public-sponsor", profileAchievementSnapshot);
+            const sponsorVerifiedViaPublicProfile = Boolean(publicSponsorBadge || publicProfileSponsoringCount > 0);
+            const sponsorVerificationStatus = sponsorVerifiedViaPublicProfile
+                ? "verified"
+                : sponsorResult.verificationStatus;
+            const sponsorLimitation = sponsorVerifiedViaPublicProfile
+                ? undefined
+                : sponsorResult.limitation;
+            const officialProfileFloorsApplied = [
+                ["starstruck", rawStarstruckValue],
+                ["quickdraw", quickdrawStats.count],
+                ["pair-extraordinaire", rawPairCount],
+                ["pull-shark", mergedPrSearch.totalCount],
+                ["galaxy-brain", galaxyEstimate.count],
+                ["yolo", pairAndYoloInspection.yoloCount],
+                ["public-sponsor", rawSponsorCount],
+            ]
+                .filter(([id, value]) => {
+                const badge = getOfficialProfileBadge(profileAchievementSnapshot, id);
+                return Boolean(badge && value < badge.minimumValue);
+            })
+                .map(([id]) => achievements_1.ACHIEVEMENT_DEFINITIONS[id].name);
             const limitations = [
                 "Achievement progress is estimated where GitHub does not publish official badge counters.",
                 useAuthenticatedSelfData
@@ -419,13 +673,19 @@ async function analyzeAchievementProgress(params) {
                 useAuthenticatedSelfData
                     ? "Quickdraw uses your authenticated event feed, but GitHub events can still be delayed and older events can fall out of the event history window."
                     : "Quickdraw uses recent public event history and may not include older or private events.",
-                `Pair Extraordinaire and YOLO inspect up to ${pairAndYoloInspectionLimit} recent merged PRs per sync.`,
+                `Pair Extraordinaire uses a GraphQL scan (up to ${PAIR_GRAPHQL_MAX_PAGES * 50} merged PRs, including private) combined with a REST review scan of up to ${pairAndYoloInspectionLimit} recent merged PRs for YOLO.`,
             ];
+            if (profileAchievementSnapshot.limitation) {
+                limitations.push(profileAchievementSnapshot.limitation);
+            }
+            if (officialProfileFloorsApplied.length > 0) {
+                limitations.push(`Official public GitHub profile badges were used as lower-bound floors for: ${officialProfileFloorsApplied.join(", ")}.`);
+            }
             if (galaxyEstimate.limitation) {
                 limitations.push(galaxyEstimate.limitation);
             }
-            if (sponsorResult.limitation) {
-                limitations.push(sponsorResult.limitation);
+            if (sponsorLimitation) {
+                limitations.push(sponsorLimitation);
             }
             if (pairAndYoloInspection.notes.length > 0) {
                 limitations.push("Some pull requests could not be fully inspected due to API limits.");
@@ -435,54 +695,73 @@ async function analyzeAchievementProgress(params) {
                     highestStarredRepo: highestRepo?.name ?? "None",
                     highestStarredRepoUrl: highestRepo?.html_url ?? null,
                     currentStarCount: starstruckValue,
+                    apiHighestStarCount: rawStarstruckValue,
                     repoVisibilityChecked: useAuthenticatedSelfData
                         ? "public and private owned repositories"
                         : "public owned repositories only",
-                }, true, useAuthenticatedSelfData
+                    ...officialProfileDetectedStats(starstruckProfileBadge),
+                }, true, joinNotes(useAuthenticatedSelfData
                     ? "Estimated from your highest-starred owned repository, including private repos visible to your token."
-                    : "Estimated from your highest-starred public owned repository."),
-                buildAchievement("quickdraw", quickdrawStats.count, {
-                    qualifyingQuickCloses: quickdrawStats.count,
+                    : "Estimated from your highest-starred public owned repository.", officialProfileFloorNote("starstruck", starstruckProfileBadge, rawStarstruckValue))),
+                buildAchievement("quickdraw", quickdrawValue, {
+                    qualifyingQuickCloses: quickdrawValue,
+                    eventMatchesFound: quickdrawStats.count,
                     eventsInspected: quickdrawStats.inspectedEvents,
                     eventVisibilityChecked: useAuthenticatedSelfData
                         ? "public and private recent events"
                         : "public recent events only",
                     sampleMatches: quickdrawStats.samples.join(", ") ||
                         "No qualifying quick closes found",
-                }, true, useAuthenticatedSelfData
+                    ...officialProfileDetectedStats(quickdrawProfileBadge),
+                }, true, joinNotes(useAuthenticatedSelfData
                     ? "Estimated from recent authenticated IssuesEvent and PullRequestEvent data, including private events returned by GitHub for your account."
-                    : "Estimated from recent public IssuesEvent and PullRequestEvent data."),
-                buildAchievement("pair-extraordinaire", pairAndYoloInspection.pairCount, {
-                    qualifyingMergedPrs: pairAndYoloInspection.pairCount,
-                    mergedPrsInspected: pairAndYoloInspection.inspectedPrs,
-                    inspectionWindow: `${pairAndYoloInspectionLimit} most recent merged PRs`,
-                }, true, `Estimated from co-authored commit metadata in up to ${pairAndYoloInspectionLimit} recent merged PRs.`),
-                buildAchievement("pull-shark", mergedPrSearch.totalCount, {
-                    totalMergedPrs: mergedPrSearch.totalCount,
+                    : "Estimated from recent public IssuesEvent and PullRequestEvent data.", officialProfileFloorNote("quickdraw", quickdrawProfileBadge, quickdrawStats.count))),
+                buildAchievement("pair-extraordinaire", pairCount, {
+                    qualifyingMergedPrs: pairCount,
+                    estimatedFromApi: rawPairCount,
+                    foundViaGraphQL: pairGraphqlResult.count,
+                    foundViaRestInspection: pairAndYoloInspection.pairCount,
+                    totalPrsInspected: pairInspectedTotal,
+                    inspectionWindow: `GraphQL: up to ${PAIR_GRAPHQL_MAX_PAGES * 50} merged PRs (incl. private) + REST: ${pairAndYoloInspectionLimit} recent merged PRs`,
+                    ...officialProfileDetectedStats(pairProfileBadge),
+                }, true, joinNotes(pairGraphqlResult.count > 0
+                    ? `Detected via GraphQL scan of merged PRs (includes private repos accessible to the provided token).`
+                    : `Estimated from co-authored commit metadata. For private org repos, provide your own GitHub token for full coverage.`, officialProfileFloorNote("pair-extraordinaire", pairProfileBadge, rawPairCount))),
+                buildAchievement("pull-shark", pullSharkValue, {
+                    totalMergedPrs: pullSharkValue,
+                    apiSearchMergedPrs: mergedPrSearch.totalCount,
                     searchVisibilityChecked: useAuthenticatedSelfData
                         ? "token-accessible public and private pull requests"
                         : "public pull requests only",
-                }, true, useAuthenticatedSelfData
+                    ...officialProfileDetectedStats(pullSharkProfileBadge),
+                }, true, joinNotes(useAuthenticatedSelfData
                     ? "Estimated from GitHub pull-request search results, including private pull requests visible to your token."
-                    : "Estimated from GitHub pull-request search results."),
-                buildAchievement("galaxy-brain", galaxyEstimate.count, {
-                    acceptedDiscussionAnswers: galaxyEstimate.count,
+                    : "Estimated from GitHub pull-request search results.", officialProfileFloorNote("pull-shark", pullSharkProfileBadge, mergedPrSearch.totalCount))),
+                buildAchievement("galaxy-brain", galaxyBrainValue, {
+                    acceptedDiscussionAnswers: galaxyBrainValue,
+                    graphqlAcceptedAnswers: galaxyEstimate.count,
                     discussionVisibilityChecked: useAuthenticatedSelfData
                         ? "token-accessible public and private discussions"
                         : "public discussions only",
-                }, true, galaxyEstimate.limitation ??
+                    ...officialProfileDetectedStats(galaxyBrainProfileBadge),
+                }, true, joinNotes(galaxyEstimate.limitation ??
                     (useAuthenticatedSelfData
                         ? "Estimated from discussion search, including private results visible to your token, because official counters are not fully exposed."
-                        : "Estimated from answered discussion search because official counters are not fully exposed.")),
-                buildAchievement("yolo", pairAndYoloInspection.yoloCount, {
-                    unreviewedMergedPrs: pairAndYoloInspection.yoloCount,
+                        : "Estimated from answered discussion search because official counters are not fully exposed."), officialProfileFloorNote("galaxy-brain", galaxyBrainProfileBadge, galaxyEstimate.count))),
+                buildAchievement("yolo", yoloValue, {
+                    unreviewedMergedPrs: yoloValue,
+                    apiUnreviewedMergedPrs: pairAndYoloInspection.yoloCount,
                     mergedPrsInspected: pairAndYoloInspection.inspectedPrs,
                     inspectionWindow: `${pairAndYoloInspectionLimit} most recent merged PRs`,
-                }, true, `Estimated from review activity in up to ${pairAndYoloInspectionLimit} recent merged PRs.`),
-                buildAchievement("public-sponsor", sponsorResult.count, {
-                    publicSponsorshipsDetected: sponsorResult.count,
-                    verificationStatus: sponsorResult.verificationStatus,
-                }, false, sponsorResult.limitation, sponsorResult.verificationStatus),
+                    ...officialProfileDetectedStats(yoloProfileBadge),
+                }, true, joinNotes(`Estimated from review activity in up to ${pairAndYoloInspectionLimit} recent merged PRs.`, officialProfileFloorNote("yolo", yoloProfileBadge, pairAndYoloInspection.yoloCount))),
+                buildAchievement("public-sponsor", sponsorValue, {
+                    publicSponsorshipsDetected: sponsorValue,
+                    graphqlSponsorshipsDetected: sponsorResult.count,
+                    publicProfileSponsoringCount: profileAchievementSnapshot.publicSponsoringCount,
+                    verificationStatus: sponsorVerificationStatus,
+                    ...officialProfileDetectedStats(publicSponsorBadge),
+                }, false, sponsorLimitation, sponsorVerificationStatus),
             ];
             const now = new Date();
             const payload = {

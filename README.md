@@ -20,6 +20,12 @@ Public GitHub data works without a token. A GitHub token improves accuracy, rais
 
 ## Live Link
 
+Deployed app:
+
+```text
+https://github-achievement.vercel.app/
+```
+
 Local frontend:
 
 ```text
@@ -31,8 +37,6 @@ Local backend:
 ```text
 http://localhost:5050
 ```
-
-Add your deployed frontend URL here when the app is published.
 
 ## What The App Does
 

@@ -22,21 +22,7 @@ Public GitHub data works without a token. A GitHub token improves accuracy, rais
 
 Deployed app:
 
-```text
-https://github-achievement.vercel.app/
-```
-
-Local frontend:
-
-```text
-http://localhost:5173
-```
-
-Local backend:
-
-```text
-http://localhost:5050
-```
+[https://github-achievement.vercel.app/](https://github-achievement.vercel.app/)
 
 ## What The App Does
 

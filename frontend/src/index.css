@@ -1,51 +1,75 @@
-@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@400;500;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap");
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  min-height: 100%;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
-  background: #030712;
-  color: #e5e7eb;
+  background: #0a0a0a;
+  color: #e2e8f0;
   font-family:
-    "Space Grotesk",
+    "Sora",
     system-ui,
     -apple-system,
     "Segoe UI",
     sans-serif;
 }
 
+#root {
+  min-height: 100vh;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
 code,
 pre {
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+::selection {
+  background: rgba(56, 189, 248, 0.24);
+  color: #f8fafc;
 }
 
 .achievement-highlight {
-  border-color: rgba(34, 211, 238, 0.85);
+  border-color: rgba(56, 189, 248, 0.5);
   box-shadow:
-    0 0 0 1px rgba(34, 211, 238, 0.35),
-    0 0 30px rgba(34, 211, 238, 0.18);
+    0 0 0 1px rgba(56, 189, 248, 0.24),
+    0 24px 72px rgba(76, 29, 149, 0.34);
   animation: achievement-pulse 2s ease-in-out 2;
 }
 
 @keyframes achievement-pulse {
   0% {
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
   50% {
-    transform: translateY(-2px);
+    transform: translateY(-3px) scale(1.01);
   }
   100% {
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }

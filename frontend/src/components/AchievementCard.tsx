@@ -1,5 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AchievementResult } from "../types";
+import GalaxyBrainBadge from "../assets/GalaxyBrain.png";
+import GitHubSponsorBadge from "../assets/GitHubSponsorBadge.png";
+import PairExtraordinaireBadge from "../assets/PairExtraordinaire.png";
+import PullSharkBadge from "../assets/PullShark.png";
+import QuickdrawBadge from "../assets/QuickDraw_SkinTone1.png";
+import StarstruckBadge from "../assets/StarStruck_SkinTone1.png";
+import YoloBadge from "../assets/YOLO_Badge.png";
 import ProgressBar from "./ProgressBar";
 import StatusPill from "./StatusPill";
 
@@ -37,11 +44,77 @@ function isUrl(value: string): boolean {
   return /^https?:\/\//i.test(value);
 }
 
+const localAchievementBadgeMap: Record<AchievementResult["id"], string> = {
+  starstruck: StarstruckBadge,
+  quickdraw: QuickdrawBadge,
+  "pair-extraordinaire": PairExtraordinaireBadge,
+  "pull-shark": PullSharkBadge,
+  "galaxy-brain": GalaxyBrainBadge,
+  yolo: YoloBadge,
+  "public-sponsor": GitHubSponsorBadge,
+};
+
+function resolveBadgeImage(achievement: AchievementResult): string {
+  return localAchievementBadgeMap[achievement.id] ?? achievement.badgeImageUrl;
+}
+
+function DetailLabel({ children }: { children: string }) {
+  return (
+    <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400">
+      {children}
+    </p>
+  );
+}
+
 function AchievementCard({
   achievement,
   highlighted = false,
 }: AchievementCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const [animatedValue, setAnimatedValue] = useState(0);
+  const previousValueRef = useRef(0);
+  const badgeImageSrc = resolveBadgeImage(achievement);
+
+  useEffect(() => {
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+
+    if (reduceMotion) {
+      previousValueRef.current = achievement.currentValue;
+      setAnimatedValue(achievement.currentValue);
+      return;
+    }
+
+    const startValue = previousValueRef.current;
+    const endValue = achievement.currentValue;
+    const durationMs = 900;
+    let frameId = 0;
+    const startTime = performance.now();
+
+    const animate = (now: number) => {
+      const progress = Math.min((now - startTime) / durationMs, 1);
+      const easedProgress = 1 - Math.pow(1 - progress, 3);
+      const nextValue = Math.round(
+        startValue + (endValue - startValue) * easedProgress,
+      );
+
+      setAnimatedValue(nextValue);
+
+      if (progress < 1) {
+        frameId = window.requestAnimationFrame(animate);
+        return;
+      }
+
+      previousValueRef.current = endValue;
+    };
+
+    frameId = window.requestAnimationFrame(animate);
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [achievement.currentValue]);
 
   const tierSummary = useMemo(() => {
     if (!achievement.nextTier || !achievement.nextTarget) {
@@ -80,114 +153,120 @@ function AchievementCard({
 
   return (
     <article
-      className={`rounded-2xl border border-slate-800 bg-slate-900/85 p-5 shadow-xl transition-all ${
+      className={`group relative overflow-hidden rounded-[1.45rem] border border-white/10 bg-[rgba(8,12,24,0.74)] px-4 py-4 text-slate-100 shadow-[0_18px_50px_rgba(2,6,23,0.35)] backdrop-blur-md transition duration-300 hover:-translate-y-1 hover:shadow-[0_24px_60px_rgba(2,6,23,0.42)] ${
         highlighted ? "achievement-highlight" : ""
       }`}
     >
-      <div className="mb-4 flex items-start justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <img
-            src={achievement.badgeImageUrl}
-            alt={`${achievement.name} badge`}
-            className="h-14 w-14 rounded-lg border border-slate-700 object-cover"
-            loading="lazy"
-          />
-          <div>
-            <h3 className="text-lg font-semibold text-slate-100">
-              {achievement.name}
-            </h3>
-            <p className="text-sm text-slate-400">{achievement.description}</p>
-          </div>
-        </div>
+      <div className="pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+
+      <div className="flex items-start justify-between gap-3">
+        <img
+          src={badgeImageSrc}
+          alt={`${achievement.name} badge`}
+          className="h-12 w-12 rounded-full border-2 border-white/80 bg-white/90 object-cover p-0.5 shadow-[0_10px_24px_rgba(15,23,42,0.25)]"
+          loading="lazy"
+        />
         <StatusPill status={achievement.status} />
       </div>
 
-      <div className="mb-3 flex items-center gap-2 text-xs text-slate-400">
+      <div className="mt-4 text-center">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
+          {achievement.name}
+        </p>
+        <p className="mt-3 font-mono text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+          {animatedValue.toLocaleString()}
+        </p>
+        <p className="mt-1.5 text-xs leading-5 text-slate-300 sm:text-sm">
+          {achievement.description}
+        </p>
+      </div>
+
+      <div className="mt-4 rounded-[1rem] border border-white/10 bg-white/5 p-3">
+        <div className="mb-2 flex items-center justify-between gap-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+          <span>
+            {achievement.currentTier === "None"
+              ? "Not started"
+              : achievement.currentTier}
+          </span>
+          <span>{achievement.progressPercent.toFixed(0)}%</span>
+        </div>
+        <ProgressBar value={achievement.progressPercent} />
+        <div className="mt-2.5 flex items-center justify-between gap-3 text-[11px] text-slate-300 sm:text-xs">
+          <span>{progressCopy}</span>
+          <span>{achievement.nextTier ? `To ${achievement.nextTier}` : "Max tier"}</span>
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-[11px] sm:text-xs">
         {achievement.estimated ? (
           <span
-            className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-amber-200"
+            className="rounded-full border border-amber-300/25 bg-amber-300/10 px-2.5 py-1 text-amber-200"
             title="Best-effort estimate based on currently available GitHub API data"
           >
             Estimated
-            <span
-              aria-hidden="true"
-              className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-amber-400/40 text-[10px]"
-            >
-              i
-            </span>
           </span>
         ) : (
-          <span className="inline-flex items-center rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-emerald-200">
+          <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-1 text-emerald-200">
             Verified
           </span>
         )}
         {achievement.verificationStatus ? (
-          <span className="rounded-full border border-slate-700 px-2 py-0.5 text-slate-300">
-            Sponsor check: {achievement.verificationStatus}
+          <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-slate-300">
+            Sponsor: {achievement.verificationStatus}
           </span>
         ) : null}
       </div>
 
-      <div className="mb-3 text-sm text-slate-200">
-        <span className="font-semibold">Progress:</span>{" "}
-        {progressCopy}
-      </div>
-
-      <div className="mb-2 flex items-center justify-between gap-3 text-xs text-slate-400">
-        <span>{tierSummary}</span>
-        <span>{achievement.progressPercent.toFixed(0)}%</span>
-      </div>
-      <ProgressBar value={achievement.progressPercent} />
-      <p className="mt-2 text-xs text-slate-400">{tierProgressDetail}</p>
-
-      <div className="mt-3 flex flex-wrap gap-2 text-xs">
-        <span className="rounded-full border border-slate-700 bg-slate-800 px-2 py-1 text-slate-300">
-          Current tier: {achievement.currentTier}
-        </span>
-        {achievement.nextTier ? (
-          <span className="rounded-full border border-slate-700 bg-slate-800 px-2 py-1 text-slate-300">
-            Next: {achievement.nextTier}
-          </span>
-        ) : (
-          <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-emerald-300">
-            Top tier reached
-          </span>
-        )}
-      </div>
-
       <button
         type="button"
-        className="mt-4 text-sm font-medium text-sky-300 transition hover:text-sky-200"
+        className="mt-4 w-full rounded-full border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-100 transition hover:bg-white/10"
         onClick={() => setExpanded((prev) => !prev)}
       >
-        {expanded ? "Hide details" : "Show details"}
+        {expanded ? "Hide Details" : "Show Details"}
       </button>
 
       {expanded ? (
-        <div className="mt-4 space-y-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4 text-sm">
-          <div>
-            <p className="mb-1 text-xs uppercase tracking-wide text-slate-400">
-              How to earn it
-            </p>
-            <p className="text-slate-200">{achievement.instructions}</p>
+        <div className="mt-3 space-y-3 rounded-[1.2rem] border border-white/10 bg-black/25 p-3.5 text-left text-xs sm:text-sm">
+          <div className="flex items-center gap-3 rounded-[1rem] border border-white/10 bg-white/5 p-3">
+            <img
+              src={badgeImageSrc}
+              alt={`${achievement.name} badge`}
+              className="h-12 w-12 rounded-full border-2 border-white/70 bg-white/90 object-cover p-0.5"
+              loading="lazy"
+            />
+            <div>
+              <DetailLabel>Tier Summary</DetailLabel>
+              <p className="mt-1.5 text-slate-100">{tierSummary}</p>
+            </div>
           </div>
 
           <div>
-            <p className="mb-1 text-xs uppercase tracking-wide text-slate-400">
-              Detected stats
+            <DetailLabel>How To Earn</DetailLabel>
+            <p className="mt-1.5 leading-6 text-slate-300">
+              {achievement.instructions}
             </p>
-            <ul className="space-y-1 text-slate-300">
+          </div>
+
+          <div>
+            <DetailLabel>Progress Detail</DetailLabel>
+            <p className="mt-1.5 text-slate-300">{tierProgressDetail}</p>
+          </div>
+
+          <div>
+            <DetailLabel>Detected Stats</DetailLabel>
+            <ul className="mt-2.5 space-y-2 text-slate-300">
               {Object.entries(achievement.detectedStats).map(([key, value]) => (
-                <li key={key}>
-                  <span className="text-slate-400">
-                    {formatStatLabel(key)}:
-                  </span>{" "}
+                <li
+                  key={key}
+                  className="rounded-[0.9rem] border border-white/10 bg-white/5 px-3 py-2"
+                >
+                  <span className="text-slate-400">{formatStatLabel(key)}:</span>{" "}
                   {typeof value === "string" && isUrl(value) ? (
                     <a
                       href={value}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-sky-300 hover:text-sky-200"
+                      className="text-sky-300 transition hover:text-sky-200"
                     >
                       Open link
                     </a>
@@ -200,14 +279,12 @@ function AchievementCard({
           </div>
 
           <div>
-            <p className="mb-1 text-xs uppercase tracking-wide text-slate-400">
-              Tier targets
-            </p>
-            <div className="flex flex-wrap gap-2">
+            <DetailLabel>Tier Targets</DetailLabel>
+            <div className="mt-2.5 flex flex-wrap gap-2">
               {achievement.tiers.map((tier) => (
                 <span
                   key={tier.label}
-                  className="rounded-full border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-300"
+                  className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-slate-300 sm:text-xs"
                 >
                   {tier.label}: {tier.target}
                 </span>
@@ -216,7 +293,7 @@ function AchievementCard({
           </div>
 
           {achievement.limitationNote ? (
-            <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-amber-100">
+            <p className="rounded-[0.9rem] border border-amber-300/20 bg-amber-300/10 px-3 py-2.5 text-amber-100">
               {achievement.limitationNote}
             </p>
           ) : null}

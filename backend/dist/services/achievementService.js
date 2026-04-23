@@ -18,6 +18,11 @@ const AUTHENTICATED_PAIR_YOLO_INSPECTION_LIMIT = 150;
 const MAX_MERGED_PR_SEARCH_PAGES = 5;
 const PAIR_EXTRAORDINAIRE_GOLD_TARGET = achievements_1.ACHIEVEMENT_DEFINITIONS["pair-extraordinaire"].tiers[achievements_1.ACHIEVEMENT_DEFINITIONS["pair-extraordinaire"].tiers.length - 1]?.target ?? 48;
 const YOLO_DEFAULT_TARGET = achievements_1.ACHIEVEMENT_DEFINITIONS.yolo.tiers[achievements_1.ACHIEVEMENT_DEFINITIONS.yolo.tiers.length - 1]?.target ?? 1;
+const inFlightAnalyzeRequests = new Map();
+const SERVER_GITHUB_TOKEN = process.env.GITHUB_TOKEN?.trim() ||
+    process.env.GITHUB_ACCESS_TOKEN?.trim() ||
+    process.env.GITHUB_PAT?.trim() ||
+    "";
 function cacheTtlMs(hasToken) {
     const seconds = hasToken ? AUTH_CACHE_TTL_SECONDS : PUBLIC_CACHE_TTL_SECONDS;
     return Math.max(0, seconds) * 1000;
@@ -313,6 +318,24 @@ function normalizedIntervalSeconds() {
 function dedupeStrings(values) {
     return [...new Set(values.filter(Boolean))];
 }
+function readRateLimitResetAt(error) {
+    if (!error.details || typeof error.details !== "object") {
+        return null;
+    }
+    const resetAt = error.details.resetAt;
+    return typeof resetAt === "string" ? resetAt : null;
+}
+function buildRateLimitedFallback(cachedPayload, error) {
+    const resetAt = readRateLimitResetAt(error);
+    const retryMessage = resetAt
+        ? `Showing the most recent cached result because GitHub rate-limited refresh requests until ${new Date(resetAt).toLocaleString()}.`
+        : "Showing the most recent cached result because GitHub rate-limited refresh requests.";
+    return {
+        ...cachedPayload,
+        cacheHit: true,
+        apiLimitations: dedupeStrings([retryMessage, ...cachedPayload.apiLimitations]),
+    };
+}
 function invalidateUserAchievementCache(username) {
     (0, cache_1.invalidateAnalyzeCacheByUsername)(username);
 }
@@ -321,153 +344,184 @@ async function analyzeAchievementProgress(params) {
     if (!username) {
         throw new errors_1.AppError(400, "INVALID_USERNAME", "Username is required.");
     }
-    const token = params.token?.trim() || undefined;
-    const cacheKey = `${username.toLowerCase()}:${token ? `auth:${hashTokenForCache(token)}` : "public"}`;
+    const requestToken = params.token?.trim() || undefined;
+    const serverToken = requestToken ? undefined : SERVER_GITHUB_TOKEN || undefined;
+    const token = requestToken ?? serverToken;
+    const cacheScope = requestToken
+        ? `auth:${hashTokenForCache(requestToken)}`
+        : serverToken
+            ? `server-auth:${hashTokenForCache(serverToken)}`
+            : "public";
+    const cacheKey = `${username.toLowerCase()}:${cacheScope}`;
     const ttlMs = cacheTtlMs(Boolean(token));
-    if (!params.forceRefresh && ttlMs > 0) {
-        const cached = (0, cache_1.getCachedAnalyzeResult)(cacheKey);
-        if (cached) {
-            return {
-                ...cached.payload,
-                cacheHit: true,
+    const freshCached = (0, cache_1.getCachedAnalyzeResult)(cacheKey);
+    const mostRecentCached = (0, cache_1.getMostRecentAnalyzeResult)(cacheKey);
+    if (!params.forceRefresh && ttlMs > 0 && freshCached) {
+        return {
+            ...freshCached.payload,
+            cacheHit: true,
+        };
+    }
+    const inFlight = inFlightAnalyzeRequests.get(cacheKey);
+    if (inFlight) {
+        return inFlight;
+    }
+    const requestPromise = (async () => {
+        try {
+            const client = (0, githubClient_1.createGitHubClient)(token);
+            const authenticatedViewer = token
+                ? await client.rest("/user")
+                : null;
+            const usingServerToken = Boolean(serverToken);
+            const useAuthenticatedSelfData = Boolean(authenticatedViewer &&
+                isSameUserLogin(authenticatedViewer.login, username));
+            const pairAndYoloInspectionLimit = useAuthenticatedSelfData
+                ? AUTHENTICATED_PAIR_YOLO_INSPECTION_LIMIT
+                : PUBLIC_PAIR_YOLO_INSPECTION_LIMIT;
+            let user;
+            try {
+                user =
+                    useAuthenticatedSelfData && authenticatedViewer
+                        ? authenticatedViewer
+                        : await client.rest(`/users/${encodeURIComponent(username)}`);
+            }
+            catch (error) {
+                if (error instanceof errors_1.AppError && error.code === "GITHUB_NOT_FOUND") {
+                    throw new errors_1.AppError(404, "USERNAME_NOT_FOUND", "GitHub username was not found.");
+                }
+                throw error;
+            }
+            const [repos, events, mergedPrSearch, galaxyEstimate, sponsorResult] = await Promise.all([
+                fetchAllOwnedRepos(username, client.rest, useAuthenticatedSelfData),
+                fetchRecentEvents(username, client.rest, useAuthenticatedSelfData),
+                fetchMergedPrSearch(username, client.rest, pairAndYoloInspectionLimit),
+                getGalaxyBrainEstimate(username, client.rest),
+                getPublicSponsorStatus(username, requestToken),
+            ]);
+            const pairAndYoloInspection = await inspectPairAndYoloSignals(mergedPrSearch.items, client.rest);
+            const highestRepo = repos.reduce((best, current) => {
+                if (!best || current.stargazers_count > best.stargazers_count) {
+                    return current;
+                }
+                return best;
+            }, null);
+            const starstruckValue = highestRepo?.stargazers_count ?? 0;
+            const quickdrawStats = countQuickdrawMatches(username, events);
+            const limitations = [
+                "Achievement progress is estimated where GitHub does not publish official badge counters.",
+                useAuthenticatedSelfData
+                    ? "Authenticated self-analysis is enabled. Private repositories, private pull requests, and private events are included when the token can access them."
+                    : requestToken && authenticatedViewer
+                        ? `Token belongs to @${authenticatedViewer.login}, so progress for @${username} is limited mostly to public activity. Use a token from the analyzed account for the best coverage.`
+                        : usingServerToken
+                            ? "Server GitHub token is enabled for higher API limits. Private activity is still unavailable unless you analyze with a token from the same GitHub account."
+                            : "Private activity may be missing when no token is provided.",
+                useAuthenticatedSelfData
+                    ? "Quickdraw uses your authenticated event feed, but GitHub events can still be delayed and older events can fall out of the event history window."
+                    : "Quickdraw uses recent public event history and may not include older or private events.",
+                `Pair Extraordinaire and YOLO inspect up to ${pairAndYoloInspectionLimit} recent merged PRs per sync.`,
+            ];
+            if (galaxyEstimate.limitation) {
+                limitations.push(galaxyEstimate.limitation);
+            }
+            if (sponsorResult.limitation) {
+                limitations.push(sponsorResult.limitation);
+            }
+            if (pairAndYoloInspection.notes.length > 0) {
+                limitations.push("Some pull requests could not be fully inspected due to API limits.");
+            }
+            const achievements = [
+                buildAchievement("starstruck", starstruckValue, {
+                    highestStarredRepo: highestRepo?.name ?? "None",
+                    highestStarredRepoUrl: highestRepo?.html_url ?? null,
+                    currentStarCount: starstruckValue,
+                    repoVisibilityChecked: useAuthenticatedSelfData
+                        ? "public and private owned repositories"
+                        : "public owned repositories only",
+                }, true, useAuthenticatedSelfData
+                    ? "Estimated from your highest-starred owned repository, including private repos visible to your token."
+                    : "Estimated from your highest-starred public owned repository."),
+                buildAchievement("quickdraw", quickdrawStats.count, {
+                    qualifyingQuickCloses: quickdrawStats.count,
+                    eventsInspected: quickdrawStats.inspectedEvents,
+                    eventVisibilityChecked: useAuthenticatedSelfData
+                        ? "public and private recent events"
+                        : "public recent events only",
+                    sampleMatches: quickdrawStats.samples.join(", ") ||
+                        "No qualifying quick closes found",
+                }, true, useAuthenticatedSelfData
+                    ? "Estimated from recent authenticated IssuesEvent and PullRequestEvent data, including private events returned by GitHub for your account."
+                    : "Estimated from recent public IssuesEvent and PullRequestEvent data."),
+                buildAchievement("pair-extraordinaire", pairAndYoloInspection.pairCount, {
+                    qualifyingMergedPrs: pairAndYoloInspection.pairCount,
+                    mergedPrsInspected: pairAndYoloInspection.inspectedPrs,
+                    inspectionWindow: `${pairAndYoloInspectionLimit} most recent merged PRs`,
+                }, true, `Estimated from co-authored commit metadata in up to ${pairAndYoloInspectionLimit} recent merged PRs.`),
+                buildAchievement("pull-shark", mergedPrSearch.totalCount, {
+                    totalMergedPrs: mergedPrSearch.totalCount,
+                    searchVisibilityChecked: useAuthenticatedSelfData
+                        ? "token-accessible public and private pull requests"
+                        : "public pull requests only",
+                }, true, useAuthenticatedSelfData
+                    ? "Estimated from GitHub pull-request search results, including private pull requests visible to your token."
+                    : "Estimated from GitHub pull-request search results."),
+                buildAchievement("galaxy-brain", galaxyEstimate.count, {
+                    acceptedDiscussionAnswers: galaxyEstimate.count,
+                    discussionVisibilityChecked: useAuthenticatedSelfData
+                        ? "token-accessible public and private discussions"
+                        : "public discussions only",
+                }, true, galaxyEstimate.limitation ??
+                    (useAuthenticatedSelfData
+                        ? "Estimated from discussion search, including private results visible to your token, because official counters are not fully exposed."
+                        : "Estimated from answered discussion search because official counters are not fully exposed.")),
+                buildAchievement("yolo", pairAndYoloInspection.yoloCount, {
+                    unreviewedMergedPrs: pairAndYoloInspection.yoloCount,
+                    mergedPrsInspected: pairAndYoloInspection.inspectedPrs,
+                    inspectionWindow: `${pairAndYoloInspectionLimit} most recent merged PRs`,
+                }, true, `Estimated from review activity in up to ${pairAndYoloInspectionLimit} recent merged PRs.`),
+                buildAchievement("public-sponsor", sponsorResult.count, {
+                    publicSponsorshipsDetected: sponsorResult.count,
+                    verificationStatus: sponsorResult.verificationStatus,
+                }, false, sponsorResult.limitation, sponsorResult.verificationStatus),
+            ];
+            const now = new Date();
+            const payload = {
+                profile: {
+                    username: user.login,
+                    name: user.name,
+                    avatarUrl: user.avatar_url,
+                    bio: user.bio,
+                    profileUrl: user.html_url,
+                    followers: user.followers,
+                    following: user.following,
+                    publicRepos: user.public_repos,
+                },
+                achievements,
+                syncedAt: now.toISOString(),
+                lastSyncedLabel: now.toLocaleString(),
+                autoSyncEnabled: true,
+                autoSyncIntervalSeconds: normalizedIntervalSeconds(),
+                cacheHit: false,
+                apiLimitations: dedupeStrings(limitations),
             };
+            if (ttlMs > 0) {
+                (0, cache_1.setCachedAnalyzeResult)(cacheKey, payload, ttlMs);
+            }
+            return payload;
         }
-    }
-    const client = (0, githubClient_1.createGitHubClient)(token);
-    const authenticatedViewer = token
-        ? await client.rest("/user")
-        : null;
-    const useAuthenticatedSelfData = Boolean(authenticatedViewer && isSameUserLogin(authenticatedViewer.login, username));
-    const pairAndYoloInspectionLimit = useAuthenticatedSelfData
-        ? AUTHENTICATED_PAIR_YOLO_INSPECTION_LIMIT
-        : PUBLIC_PAIR_YOLO_INSPECTION_LIMIT;
-    let user;
-    try {
-        user =
-            useAuthenticatedSelfData && authenticatedViewer
-                ? authenticatedViewer
-                : await client.rest(`/users/${encodeURIComponent(username)}`);
-    }
-    catch (error) {
-        if (error instanceof errors_1.AppError && error.code === "GITHUB_NOT_FOUND") {
-            throw new errors_1.AppError(404, "USERNAME_NOT_FOUND", "GitHub username was not found.");
+        catch (error) {
+            if (error instanceof errors_1.AppError &&
+                error.code === "GITHUB_RATE_LIMIT" &&
+                mostRecentCached) {
+                return buildRateLimitedFallback(mostRecentCached.payload, error);
+            }
+            throw error;
         }
-        throw error;
-    }
-    const [repos, events, mergedPrSearch, galaxyEstimate, sponsorResult] = await Promise.all([
-        fetchAllOwnedRepos(username, client.rest, useAuthenticatedSelfData),
-        fetchRecentEvents(username, client.rest, useAuthenticatedSelfData),
-        fetchMergedPrSearch(username, client.rest, pairAndYoloInspectionLimit),
-        getGalaxyBrainEstimate(username, client.rest),
-        getPublicSponsorStatus(username, token),
-    ]);
-    const pairAndYoloInspection = await inspectPairAndYoloSignals(mergedPrSearch.items, client.rest);
-    const highestRepo = repos.reduce((best, current) => {
-        if (!best || current.stargazers_count > best.stargazers_count) {
-            return current;
+        finally {
+            inFlightAnalyzeRequests.delete(cacheKey);
         }
-        return best;
-    }, null);
-    const starstruckValue = highestRepo?.stargazers_count ?? 0;
-    const quickdrawStats = countQuickdrawMatches(username, events);
-    const limitations = [
-        "Achievement progress is estimated where GitHub does not publish official badge counters.",
-        useAuthenticatedSelfData
-            ? "Authenticated self-analysis is enabled. Private repositories, private pull requests, and private events are included when the token can access them."
-            : token && authenticatedViewer
-                ? `Token belongs to @${authenticatedViewer.login}, so progress for @${username} is limited mostly to public activity. Use a token from the analyzed account for the best coverage.`
-                : "Private activity may be missing when no token is provided.",
-        useAuthenticatedSelfData
-            ? "Quickdraw uses your authenticated event feed, but GitHub events can still be delayed and older events can fall out of the event history window."
-            : "Quickdraw uses recent public event history and may not include older or private events.",
-        `Pair Extraordinaire and YOLO inspect up to ${pairAndYoloInspectionLimit} recent merged PRs per sync.`,
-    ];
-    if (galaxyEstimate.limitation) {
-        limitations.push(galaxyEstimate.limitation);
-    }
-    if (sponsorResult.limitation) {
-        limitations.push(sponsorResult.limitation);
-    }
-    if (pairAndYoloInspection.notes.length > 0) {
-        limitations.push("Some pull requests could not be fully inspected due to API limits.");
-    }
-    const achievements = [
-        buildAchievement("starstruck", starstruckValue, {
-            highestStarredRepo: highestRepo?.name ?? "None",
-            highestStarredRepoUrl: highestRepo?.html_url ?? null,
-            currentStarCount: starstruckValue,
-            repoVisibilityChecked: useAuthenticatedSelfData
-                ? "public and private owned repositories"
-                : "public owned repositories only",
-        }, true, useAuthenticatedSelfData
-            ? "Estimated from your highest-starred owned repository, including private repos visible to your token."
-            : "Estimated from your highest-starred public owned repository."),
-        buildAchievement("quickdraw", quickdrawStats.count, {
-            qualifyingQuickCloses: quickdrawStats.count,
-            eventsInspected: quickdrawStats.inspectedEvents,
-            eventVisibilityChecked: useAuthenticatedSelfData
-                ? "public and private recent events"
-                : "public recent events only",
-            sampleMatches: quickdrawStats.samples.join(", ") ||
-                "No qualifying quick closes found",
-        }, true, useAuthenticatedSelfData
-            ? "Estimated from recent authenticated IssuesEvent and PullRequestEvent data, including private events returned by GitHub for your account."
-            : "Estimated from recent public IssuesEvent and PullRequestEvent data."),
-        buildAchievement("pair-extraordinaire", pairAndYoloInspection.pairCount, {
-            qualifyingMergedPrs: pairAndYoloInspection.pairCount,
-            mergedPrsInspected: pairAndYoloInspection.inspectedPrs,
-            inspectionWindow: `${pairAndYoloInspectionLimit} most recent merged PRs`,
-        }, true, `Estimated from co-authored commit metadata in up to ${pairAndYoloInspectionLimit} recent merged PRs.`),
-        buildAchievement("pull-shark", mergedPrSearch.totalCount, {
-            totalMergedPrs: mergedPrSearch.totalCount,
-            searchVisibilityChecked: useAuthenticatedSelfData
-                ? "token-accessible public and private pull requests"
-                : "public pull requests only",
-        }, true, useAuthenticatedSelfData
-            ? "Estimated from GitHub pull-request search results, including private pull requests visible to your token."
-            : "Estimated from GitHub pull-request search results."),
-        buildAchievement("galaxy-brain", galaxyEstimate.count, {
-            acceptedDiscussionAnswers: galaxyEstimate.count,
-            discussionVisibilityChecked: useAuthenticatedSelfData
-                ? "token-accessible public and private discussions"
-                : "public discussions only",
-        }, true, galaxyEstimate.limitation ??
-            (useAuthenticatedSelfData
-                ? "Estimated from discussion search, including private results visible to your token, because official counters are not fully exposed."
-                : "Estimated from answered discussion search because official counters are not fully exposed.")),
-        buildAchievement("yolo", pairAndYoloInspection.yoloCount, {
-            unreviewedMergedPrs: pairAndYoloInspection.yoloCount,
-            mergedPrsInspected: pairAndYoloInspection.inspectedPrs,
-            inspectionWindow: `${pairAndYoloInspectionLimit} most recent merged PRs`,
-        }, true, `Estimated from review activity in up to ${pairAndYoloInspectionLimit} recent merged PRs.`),
-        buildAchievement("public-sponsor", sponsorResult.count, {
-            publicSponsorshipsDetected: sponsorResult.count,
-            verificationStatus: sponsorResult.verificationStatus,
-        }, false, sponsorResult.limitation, sponsorResult.verificationStatus),
-    ];
-    const now = new Date();
-    const payload = {
-        profile: {
-            username: user.login,
-            name: user.name,
-            avatarUrl: user.avatar_url,
-            bio: user.bio,
-            profileUrl: user.html_url,
-            followers: user.followers,
-            following: user.following,
-            publicRepos: user.public_repos,
-        },
-        achievements,
-        syncedAt: now.toISOString(),
-        lastSyncedLabel: now.toLocaleString(),
-        autoSyncEnabled: true,
-        autoSyncIntervalSeconds: normalizedIntervalSeconds(),
-        cacheHit: false,
-        apiLimitations: dedupeStrings(limitations),
-    };
-    if (ttlMs > 0) {
-        (0, cache_1.setCachedAnalyzeResult)(cacheKey, payload, ttlMs);
-    }
-    return payload;
+    })();
+    inFlightAnalyzeRequests.set(cacheKey, requestPromise);
+    return requestPromise;
 }
 //# sourceMappingURL=achievementService.js.map

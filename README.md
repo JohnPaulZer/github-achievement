@@ -56,6 +56,7 @@ The app labels progress as estimated when GitHub does not expose exact official 
 - GitHub token is optional.
 - Token is sent per request for analysis and never saved in a database.
 - Backend uses token only in memory for the current request.
+- You can also set `GITHUB_TOKEN` in `backend/.env` so the backend uses a server-side token for higher GitHub API limits.
 
 ## Local Setup
 
@@ -67,6 +68,14 @@ copy .env.example .env
 npm install
 npm run dev
 ```
+
+For local development, add a GitHub personal access token to `backend/.env`:
+
+```env
+GITHUB_TOKEN=ghp_your_token_here
+```
+
+This does not remove GitHub's rate limit, but it raises the limit significantly compared with anonymous requests and prevents the frequent `429` you were seeing from `localhost:5050`.
 
 ### 2. Frontend
 
@@ -136,6 +145,7 @@ The app updates progress via a hybrid sync model:
 - PUBLIC_CACHE_TTL_SECONDS
 - AUTH_CACHE_TTL_SECONDS
 - AUTO_SYNC_INTERVAL_SECONDS
+- GITHUB_TOKEN
 - GITHUB_WEBHOOK_SECRET
 
 ### frontend/.env

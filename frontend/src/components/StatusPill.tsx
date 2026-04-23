@@ -5,16 +5,16 @@ interface StatusPillProps {
 }
 
 const statusClasses: Record<AchievementStatus, string> = {
-  "Not started": "border-slate-600 bg-slate-800 text-slate-300",
-  "In progress": "border-sky-500/40 bg-sky-500/10 text-sky-300",
-  "Near completion": "border-amber-500/40 bg-amber-500/10 text-amber-300",
-  Achieved: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
+  "Not started": "border-white/10 bg-white/5 text-slate-300",
+  "In progress": "border-sky-400/25 bg-sky-400/10 text-sky-200",
+  "Near completion": "border-amber-300/25 bg-amber-300/10 text-amber-200",
+  Achieved: "border-emerald-400/25 bg-emerald-400/10 text-emerald-200",
 };
 
 function StatusPill({ status }: StatusPillProps) {
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClasses[status]}`}
+      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${statusClasses[status]}`}
     >
       {status}
     </span>

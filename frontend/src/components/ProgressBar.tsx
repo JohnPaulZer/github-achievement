@@ -7,7 +7,7 @@ function ProgressBar({ value }: ProgressBarProps) {
 
   return (
     <div
-      className="h-2.5 w-full rounded-full bg-slate-800"
+      className="h-2.5 w-full rounded-full bg-white/10"
       role="progressbar"
       aria-valuemin={0}
       aria-valuemax={100}
@@ -15,7 +15,7 @@ function ProgressBar({ value }: ProgressBarProps) {
       aria-label={`Progress ${percentage.toFixed(0)} percent`}
     >
       <div
-        className="h-full rounded-full bg-gradient-to-r from-sky-500 via-emerald-500 to-cyan-400 transition-all duration-500"
+        className="h-full rounded-full bg-gradient-to-r from-sky-400 via-violet-400 to-pink-400 transition-all duration-500"
         style={{ width: `${percentage}%` }}
       />
     </div>

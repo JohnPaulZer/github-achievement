@@ -74,6 +74,7 @@ export interface AnalyzeParams {
 export interface CachedAnalyzeResult {
   payload: AnalyzeResponse;
   expiresAt: number;
+  staleExpiresAt: number;
 }
 
 export interface GitHubUser {
@@ -92,6 +93,7 @@ export interface GitHubRepo {
   stargazers_count: number;
   html_url: string;
   private: boolean;
+  fork: boolean;        // ← added: required for Starstruck fork-exclusion fix
   owner: {
     login: string;
   };

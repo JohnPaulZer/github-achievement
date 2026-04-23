@@ -1,12 +1,10 @@
+import "dotenv/config";
 import cors from "cors";
-import dotenv from "dotenv";
 import express, { NextFunction, Request, Response } from "express";
 import { isAppError } from "./lib/errors";
 import achievementRoutes from "./routes/achievementRoutes";
 import syncRoutes from "./routes/syncRoutes";
 import webhookRoutes from "./routes/webhookRoutes";
-
-dotenv.config();
 
 const app = express();
 const port = Number(process.env.PORT) || 5050;

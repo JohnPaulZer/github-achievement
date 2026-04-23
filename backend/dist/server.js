@@ -3,14 +3,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+require("dotenv/config");
 const cors_1 = __importDefault(require("cors"));
-const dotenv_1 = __importDefault(require("dotenv"));
 const express_1 = __importDefault(require("express"));
 const errors_1 = require("./lib/errors");
 const achievementRoutes_1 = __importDefault(require("./routes/achievementRoutes"));
 const syncRoutes_1 = __importDefault(require("./routes/syncRoutes"));
 const webhookRoutes_1 = __importDefault(require("./routes/webhookRoutes"));
-dotenv_1.default.config();
 const app = (0, express_1.default)();
 const port = Number(process.env.PORT) || 5050;
 const corsOrigin = process.env.CORS_ORIGIN ?? "*";

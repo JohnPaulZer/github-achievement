@@ -1,4 +1,4 @@
-# GitHub Achievement Counter
+# GitHub Achievement Tracker
 
 ## Purpose
 

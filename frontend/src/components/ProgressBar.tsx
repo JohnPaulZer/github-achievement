@@ -15,7 +15,7 @@ function ProgressBar({ value }: ProgressBarProps) {
       aria-label={`Progress ${percentage.toFixed(0)} percent`}
     >
       <div
-        className="h-full rounded-full bg-gradient-to-r from-sky-400 via-fuchsia-400 to-pink-400 transition-all duration-500"
+        className="h-full rounded-full bg-sky-500 transition-all duration-500"
         style={{ width: `${percentage}%` }}
       />
     </div>

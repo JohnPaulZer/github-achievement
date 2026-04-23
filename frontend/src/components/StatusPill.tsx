@@ -7,8 +7,8 @@ interface StatusPillProps {
 const statusClasses: Record<AchievementStatus, string> = {
   "Not started": "border-slate-200/80 bg-white/70 text-slate-500",
   "In progress": "border-sky-300/70 bg-sky-100/80 text-sky-700",
-  "Near completion": "border-amber-300/70 bg-amber-100/85 text-amber-700",
-  Achieved: "border-emerald-300/70 bg-emerald-100/85 text-emerald-700",
+  "Near completion": "border-sky-300/70 bg-sky-100/80 text-sky-700",
+  Achieved: "border-sky-300/70 bg-sky-100/80 text-sky-700",
 };
 
 function StatusPill({ status }: StatusPillProps) {

@@ -1,14 +1,19 @@
 import type { FormEvent } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { AnimatedList } from "@/components/ui/animated-list";
 import {
   analyzeAchievements,
   API_BASE_URL,
   ApiError,
 } from "./api/achievementApi";
 import AchievementCard from "./components/AchievementCard";
-import LoadingSkeleton from "./components/LoadingSkeleton";
+import AchievementSummary from "./components/AchievementSummary";
+import SponsorFloatingAction from "./components/SponsorFloatingAction";
+import TokenTutorialModal from "./components/TokenTutorialModal";
 import type { AnalyzeResponse, UiNotification } from "./types";
 import { detectAchievementChanges } from "./utils/changeDetection";
+
+const AnalyzeLoading = lazy(() => import("./components/AnalyzeLoading"));
 
 interface AnalyzeCredentials {
   username: string;
@@ -96,6 +101,7 @@ function App() {
   >([]);
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(true);
   const [sseConnected, setSseConnected] = useState(false);
+  const [tokenTutorialOpen, setTokenTutorialOpen] = useState(false);
 
   const dashboardRef = useRef<AnalyzeResponse | null>(null);
   const notificationTimerRef = useRef<number | null>(null);
@@ -158,7 +164,7 @@ function App() {
 
           notificationTimerRef.current = window.setTimeout(() => {
             setNotifications([]);
-          }, 6000);
+          }, 4000 + changeResult.notifications.length * 1000);
         }
 
         if (changeResult.changedIds.length > 0) {
@@ -349,7 +355,7 @@ function App() {
       <div className="relative z-10 mx-auto flex max-w-7xl flex-col gap-6">
         <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.34em] text-sky-700/80 sm:text-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.34em] text-slate-500 sm:text-sm">
               GitHub Counter Board
             </p>
             <h1 className="mt-2 text-2xl font-semibold uppercase tracking-[0.12em] text-slate-900 sm:text-4xl">
@@ -401,10 +407,19 @@ function App() {
             />
           </label>
 
-          <label className="flex flex-col gap-1.5">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
-              Token
-            </span>
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+                Token
+              </span>
+              <button
+                className="rounded-full border border-slate-200/80 bg-white/75 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600 transition hover:bg-white hover:text-slate-900"
+                type="button"
+                onClick={() => setTokenTutorialOpen(true)}
+              >
+                Token tutorial
+              </button>
+            </div>
             <input
               value={token}
               onChange={(event) => setToken(event.target.value)}
@@ -412,12 +427,12 @@ function App() {
               placeholder="optional"
               className="h-11 rounded-full border border-white/80 bg-white/90 px-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-400/60 focus:bg-white focus:ring-4 focus:ring-sky-400/15"
             />
-          </label>
+          </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="h-11 rounded-full bg-gradient-to-r from-sky-400 via-cyan-300 to-pink-300 px-5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-900 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+            className="h-11 rounded-full bg-slate-900 px-5 text-xs font-semibold uppercase tracking-[0.14em] text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading ? "Analyzing" : "Analyze"}
           </button>
@@ -432,7 +447,7 @@ function App() {
                 silent: true,
               })
             }
-            className="h-11 rounded-full border border-rose-200/70 bg-white/85 px-5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="h-11 rounded-full border border-slate-200/80 bg-white/85 px-5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             {syncing ? "Refreshing" : "Refresh"}
           </button>
@@ -479,28 +494,34 @@ function App() {
         </div>
 
         {notifications.length > 0 ? (
-          <div className="grid gap-2">
-            {notifications.map((notification) => (
-              <div
-                key={notification.id}
-                className="rounded-[1rem] border border-emerald-300/70 bg-emerald-100/85 px-4 py-3 text-xs text-emerald-800 shadow-[0_12px_24px_rgba(16,185,129,0.08)] sm:text-sm"
-              >
-                {notification.message}
-              </div>
-            ))}
+          <div className="pointer-events-none fixed left-1/2 top-4 z-50 w-[min(calc(100vw-2rem),24rem)] -translate-x-1/2">
+            <AnimatedList delay={1000}>
+              {notifications.map((notification) => (
+                <div
+                  key={notification.id}
+                  className="pointer-events-auto rounded-[1rem] border border-slate-200/80 bg-white/90 px-4 py-3 text-center text-xs font-medium text-slate-700 shadow-[0_16px_36px_rgba(71,85,105,0.16)] backdrop-blur-xl sm:text-sm"
+                >
+                  {notification.message}
+                </div>
+              ))}
+            </AnimatedList>
           </div>
         ) : null}
 
         {errorMessage ? (
-          <div className="rounded-[1rem] border border-rose-300/70 bg-rose-100/85 px-4 py-3 text-xs text-rose-800 shadow-[0_12px_24px_rgba(244,63,94,0.08)] sm:text-sm">
+          <div className="rounded-[1rem] border border-slate-300/80 bg-white/90 px-4 py-3 text-xs text-slate-800 shadow-[0_12px_24px_rgba(148,163,184,0.08)] sm:text-sm">
             {errorMessage}
           </div>
+        ) : null}
+
+        {!loading && dashboard ? (
+          <AchievementSummary achievements={visibleAchievements} />
         ) : null}
 
         <section>
           <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-fuchsia-700/80">
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">
                 Achievements
               </p>
               <h2 className="mt-1 text-xl font-semibold uppercase tracking-[0.1em] text-slate-900 sm:text-2xl">
@@ -510,7 +531,15 @@ function App() {
           </div>
 
           {loading ? (
-            <LoadingSkeleton />
+            <Suspense
+              fallback={
+                <div className="flex min-h-[360px] items-center justify-center rounded-[1.4rem] border border-white/75 bg-[rgba(248,251,255,0.76)] px-5 py-10 text-center text-sm font-semibold text-slate-700 shadow-[0_18px_42px_rgba(148,163,184,0.16)] backdrop-blur-xl">
+                  Analyzing profile
+                </div>
+              }
+            >
+              <AnalyzeLoading />
+            </Suspense>
           ) : dashboard ? (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {visibleAchievements.map((achievement) => (
@@ -524,7 +553,7 @@ function App() {
               ))}
             </div>
           ) : !errorMessage ? (
-            <div className="rounded-[1.4rem] border border-dashed border-rose-200/70 bg-white/65 px-5 py-8 text-center shadow-[0_18px_44px_rgba(148,163,184,0.18)] backdrop-blur-xl">
+            <div className="rounded-[1.4rem] border border-dashed border-slate-200/80 bg-white/65 px-5 py-8 text-center shadow-[0_18px_44px_rgba(148,163,184,0.18)] backdrop-blur-xl">
               <h3 className="text-xl font-semibold text-slate-900">
                 Enter a GitHub username to start
               </h3>
@@ -535,6 +564,12 @@ function App() {
           ) : null}
         </section>
       </div>
+
+      <TokenTutorialModal
+        open={tokenTutorialOpen}
+        onClose={() => setTokenTutorialOpen(false)}
+      />
+      <SponsorFloatingAction />
     </main>
   );
 }
